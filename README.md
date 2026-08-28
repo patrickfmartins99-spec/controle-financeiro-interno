@@ -1,42 +1,30 @@
-# Controle Financeiro Interno
+# Controle Financeiro Interno — Top Haus
 
-Sistema web independente para controle interno de notas fiscais, despesas e depósitos, com o objetivo de evitar extravios e substituir os relatórios mantidos em Excel.
+Sistema web privado para substituir os relatórios internos de notas fiscais, despesas e depósitos.
 
-## Escopo inicial
+## O que o sistema controla
 
-### Notas fiscais
+- **Notas fiscais:** fornecedor, emissão, número, chave de acesso opcional e um ou mais vencimentos.
+- **Despesas:** descrição, data, valor e data de baixa opcional.
+- **Depósitos:** data, valor e depositante opcional.
+- **Períodos independentes:** cada relatório pode ser aberto e encerrado separadamente.
+- **Histórico:** períodos encerrados continuam pesquisáveis e podem ser reabertos.
+- **Reenvio de notas:** uma nota antiga pode ser incluída novamente no período atual sem perder o registro original.
+- **Totais corretos:** despesas e depósitos somam somente o período aberto.
 
-- Fornecedor
-- Data de emissão
-- Número da nota
-- Um ou mais vencimentos
-- Leitura da chave de acesso pelo código de barras
-- Busca da nota em todos os períodos
+## Uso local
 
-### Despesas
+```bash
+npm install
+npm run dev
+```
 
-- Nome da despesa
-- Data da despesa
-- Valor da despesa
-- Data da baixa
-- Total calculado apenas para o período aberto
+Abra `http://localhost:3000`.
 
-### Depósitos
+## Validação
 
-- Data do depósito
-- Valor do depósito
-- Depositante opcional
-- Total calculado apenas para o período aberto
+```bash
+npm run build
+```
 
-## Períodos
-
-- Notas fiscais, despesas e depósitos possuem períodos independentes.
-- Cada módulo pode ter somente um período aberto por vez.
-- Períodos encerrados permanecem disponíveis no histórico.
-- Um período encerrado pode ser reaberto para correção.
-- Registros antigos podem ser localizados por pesquisa.
-
-## Status
-
-Repositório inicial criado para o desenvolvimento da nova aplicação. A definição da interface e da arquitetura será feita antes da implementação do primeiro módulo.
-
+Os dados são armazenados em banco D1. A publicação é configurada como privada para uso interno.
