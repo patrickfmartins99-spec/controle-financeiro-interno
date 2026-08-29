@@ -78,6 +78,10 @@
   button:disabled {
     cursor: not-allowed;
   }
+  :where(a, button, input, select, textarea):focus-visible {
+    outline: 3px solid #9a735d;
+    outline-offset: 3px;
+  }
 }
 
 @media print {

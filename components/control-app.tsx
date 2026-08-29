@@ -22,6 +22,7 @@ import {
   FileSearch,
   FileText,
   History,
+  Keyboard,
   LayoutDashboard,
   Loader2,
   LockKeyhole,
@@ -143,6 +144,53 @@ function today() {
     .slice(0, 10);
 }
 
+function useAdvanceOnEnter(formRef: { current: HTMLFormElement | null }) {
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+
+    const advance = (event: KeyboardEvent) => advanceOnEnter(event, form);
+    form.addEventListener('keydown', advance);
+    return () => form.removeEventListener('keydown', advance);
+  }, [formRef]);
+}
+
+function advanceOnEnter(event: KeyboardEvent, form: HTMLFormElement) {
+  if (
+    event.key !== 'Enter' ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    event.target instanceof HTMLButtonElement
+  ) {
+    return;
+  }
+
+  const controls = Array.from(form.elements).filter(
+    (
+      element,
+    ): element is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement =>
+      (element instanceof HTMLInputElement ||
+        element instanceof HTMLSelectElement ||
+        element instanceof HTMLTextAreaElement) &&
+      !element.disabled &&
+      element.type !== 'hidden',
+  );
+  const currentIndex = controls.indexOf(
+    event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+  );
+  if (currentIndex < 0) return;
+
+  event.preventDefault();
+  const nextControl = controls[currentIndex + 1];
+  if (nextControl) {
+    nextControl.focus();
+  } else {
+    form.requestSubmit();
+  }
+}
+
 export function ControlApp() {
   const [view, setView] = useState<ViewName>('overview');
   const [data, setData] = useState<ControlData>(emptyData);
@@ -228,6 +276,14 @@ export function ControlApp() {
   function navigate(next: ViewName) {
     setView(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    requestAnimationFrame(() => {
+      const firstEntry = document.querySelector<HTMLElement>(
+        '#main-content [data-entry-field]:not(:disabled)',
+      );
+      (
+        firstEntry ?? document.querySelector<HTMLElement>('#main-content h1')
+      )?.focus();
+    });
   }
 
   async function closePeriod(period: Period) {
@@ -240,11 +296,17 @@ export function ControlApp() {
 
   return (
     <>
-      <div className="app-shell min-h-dvh bg-[#f5f4f2] text-[#171717]">
+      <div className="app-shell min-h-dvh bg-[#efede9] text-[#171717]">
+        <a
+          href="#main-content"
+          className="fixed left-4 top-0 z-[90] -translate-y-full rounded-lg bg-black px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-4"
+        >
+          Pular para o conteúdo
+        </a>
         <DesktopSidebar view={view} onNavigate={navigate} />
         <MobileHeader />
 
-        <main className="pb-28 lg:ml-[252px] lg:pb-10">
+        <main id="main-content" className="pb-28 lg:ml-[252px] lg:pb-10">
           <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
             {notice && (
               <Notice notice={notice} onClose={() => setNotice(null)} />
@@ -423,10 +485,10 @@ function MobileNavigation({
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold transition-colors ${active ? 'text-[#765541]' : 'text-zinc-400'}`}
+              className={`flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-bold transition-colors ${active ? 'text-black' : 'text-zinc-400'}`}
             >
               <span
-                className={`flex h-7 w-10 items-center justify-center rounded-full ${active ? 'bg-[#eee5df]' : ''}`}
+                className={`flex h-7 w-10 items-center justify-center rounded-full ${active ? 'bg-black text-white' : ''}`}
               >
                 <Icon className="size-[18px]" />
               </span>
@@ -483,11 +545,14 @@ function PageHeading({
   description: string;
 }) {
   return (
-    <header className="mb-6 sm:mb-8">
+    <header className="mb-6 border-l-4 border-[#765541] pl-4 sm:mb-8 sm:pl-5">
       <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#765541]">
         {eyebrow}
       </p>
-      <h1 className="font-heading text-[28px] font-bold leading-tight tracking-[-0.03em] sm:text-4xl">
+      <h1
+        tabIndex={-1}
+        className="font-heading text-[28px] font-extrabold leading-tight tracking-[-0.03em] outline-none sm:text-4xl"
+      >
         {title}
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 sm:text-[15px]">
@@ -555,7 +620,7 @@ function Overview({
       </div>
 
       <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-2xl border border-black/8 bg-white p-5 sm:p-6">
+        <div className="rounded-2xl border border-black/15 bg-white p-5 shadow-[0_14px_35px_rgba(0,0,0,0.06)] sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#765541]">
@@ -627,14 +692,18 @@ function OverviewCard({
     <button
       onClick={onClick}
       aria-label={`${period ? 'Abrir' : 'Iniciar'} relatório de ${info.title.toLocaleLowerCase('pt-BR')}`}
-      className="group flex min-h-[184px] flex-col rounded-2xl border border-black/8 bg-white p-5 text-left shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition hover:-translate-y-0.5 hover:border-[#765541]/30"
+      className="group relative flex min-h-[184px] flex-col overflow-hidden rounded-2xl border border-black/15 bg-white p-5 text-left shadow-[0_14px_35px_rgba(0,0,0,0.07)] transition hover:-translate-y-1 hover:border-[#765541]/60 hover:shadow-[0_18px_40px_rgba(0,0,0,0.1)]"
     >
+      <span
+        aria-hidden="true"
+        className={`absolute inset-x-0 top-0 h-1.5 ${period ? 'bg-[#765541]' : 'bg-black'}`}
+      />
       <div className="flex w-full items-start justify-between">
-        <span className="flex size-11 items-center justify-center rounded-xl bg-[#eee7e2] text-[#765541]">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-[#765541] text-white shadow-sm">
           <Icon className="size-5" />
         </span>
         <span
-          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${period ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}
+          className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.1em] ${period ? 'bg-emerald-700 text-white' : 'bg-zinc-900 text-white'}`}
         >
           {period ? 'Aberto' : 'Fechado'}
         </span>
@@ -645,7 +714,7 @@ function OverviewCard({
           <p className="mt-1 line-clamp-1 text-xs text-zinc-500">
             {period?.label ?? 'Toque para abrir um período'}
           </p>
-          <p className="mt-3 text-sm font-semibold">
+          <p className="mt-3 text-base font-extrabold">
             {total === undefined
               ? `${count} registro${count === 1 ? '' : 's'}`
               : currency(total)}
@@ -708,28 +777,28 @@ function PeriodStep({
   onOpen: () => void;
 }) {
   return (
-    <section className="mb-5 rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
+    <section className="mb-5 rounded-2xl border border-black bg-[#17120f] p-4 text-white shadow-[0_14px_35px_rgba(0,0,0,0.12)] sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <StepNumber number="1" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-400">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-white/50">
               Confirme o período
             </p>
             <h2 className="font-heading mt-1 text-lg font-bold">
               {period?.label ?? 'Nenhum período aberto'}
             </h2>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-xs text-white/60">
               {period
                 ? `Aberto em ${dateLabel(period.openedAt)} · ${count} lançamento${count === 1 ? '' : 's'}`
                 : `Abra um período de ${moduleInfo[module].title.toLocaleLowerCase('pt-BR')} para começar.`}
             </p>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-4 border-t border-zinc-100 pt-4 sm:border-0 sm:pt-0">
+        <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-4 sm:border-0 sm:pt-0">
           {total !== undefined && period && (
             <div className="sm:text-right">
-              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/50">
                 Total aberto
               </p>
               <p className="mt-0.5 text-lg font-bold">{currency(total)}</p>
@@ -748,7 +817,7 @@ function PeriodStep({
             <Button
               disabled={working}
               onClick={onOpen}
-              className="h-11 bg-black px-4 hover:bg-zinc-800"
+              className="h-11 bg-white px-4 text-black hover:bg-zinc-200"
             >
               <Plus /> Abrir período
             </Button>
@@ -773,6 +842,14 @@ function InvoiceView({
   const [dueDates, setDueDates] = useState([today()]);
   const [accessKey, setAccessKey] = useState('');
   const [scanner, setScanner] = useState(false);
+  const supplierRef = useRef<HTMLInputElement>(null);
+  const invoiceFormRef = useRef<HTMLFormElement>(null);
+  const activeInvoicePeriodId = period?.id;
+  useAdvanceOnEnter(invoiceFormRef);
+
+  useEffect(() => {
+    if (activeInvoicePeriodId) supplierRef.current?.focus();
+  }, [activeInvoicePeriodId]);
 
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
@@ -793,6 +870,7 @@ function InvoiceView({
       formElement.reset();
       setAccessKey('');
       setDueDates([today()]);
+      supplierRef.current?.focus();
     }
   }
 
@@ -816,9 +894,16 @@ function InvoiceView({
           title="Preencha os dados da nota"
           description="O valor da nota não é necessário neste controle."
         >
-          <form onSubmit={submit} className="space-y-4">
+          <form
+            ref={invoiceFormRef}
+            onSubmit={submit}
+            aria-label="Cadastro de nota fiscal"
+            className="space-y-4"
+          >
             <Field label="Fornecedor">
               <Input
+                ref={supplierRef}
+                data-entry-field
                 name="supplier"
                 placeholder="Ex.: Distribuidora Central"
                 required
@@ -826,7 +911,7 @@ function InvoiceView({
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <Field label="Data de emissão">
+              <Field label="Data de emissão" hint="DD/MM/AAAA">
                 <Input
                   name="issueDate"
                   type="date"
@@ -874,6 +959,9 @@ function InvoiceView({
               <div className="mb-2 flex items-center justify-between">
                 <label className="text-sm font-semibold">
                   Vencimento{dueDates.length > 1 ? 's' : ''}
+                  <span className="ml-2 text-xs font-normal text-zinc-400">
+                    (DD/MM/AAAA)
+                  </span>
                 </label>
                 <button
                   type="button"
@@ -961,6 +1049,15 @@ function ExpenseView({
     ? data.expenses.filter((item) => item.periodId === period.id)
     : [];
   const total = records.reduce((sum, item) => sum + item.amountCents, 0);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const expenseFormRef = useRef<HTMLFormElement>(null);
+  const activeExpensePeriodId = period?.id;
+  useAdvanceOnEnter(expenseFormRef);
+
+  useEffect(() => {
+    if (activeExpensePeriodId) nameRef.current?.focus();
+  }, [activeExpensePeriodId]);
+
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -976,8 +1073,10 @@ function ExpenseView({
         },
         'Despesa registrada com sucesso.',
       )
-    )
+    ) {
       formElement.reset();
+      nameRef.current?.focus();
+    }
   }
   return (
     <>
@@ -1000,9 +1099,16 @@ function ExpenseView({
           title="Preencha os dados da despesa"
           description="A data da baixa pode ser informada depois."
         >
-          <form onSubmit={submit} className="space-y-4">
+          <form
+            ref={expenseFormRef}
+            onSubmit={submit}
+            aria-label="Cadastro de despesa"
+            className="space-y-4"
+          >
             <Field label="Nome da despesa">
               <Input
+                ref={nameRef}
+                data-entry-field
                 name="name"
                 placeholder="Ex.: Material de limpeza"
                 required
@@ -1010,7 +1116,7 @@ function ExpenseView({
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <Field label="Data da despesa">
+              <Field label="Data da despesa" hint="DD/MM/AAAA">
                 <Input
                   name="expenseDate"
                   type="date"
@@ -1031,7 +1137,7 @@ function ExpenseView({
                 />
               </Field>
             </div>
-            <Field label="Data da baixa" hint="opcional">
+            <Field label="Data da baixa" hint="opcional · DD/MM/AAAA">
               <Input
                 name="settledDate"
                 type="date"
@@ -1071,6 +1177,15 @@ function DepositView({
     ? data.deposits.filter((item) => item.periodId === period.id)
     : [];
   const total = records.reduce((sum, item) => sum + item.amountCents, 0);
+  const depositDateRef = useRef<HTMLInputElement>(null);
+  const depositFormRef = useRef<HTMLFormElement>(null);
+  const activeDepositPeriodId = period?.id;
+  useAdvanceOnEnter(depositFormRef);
+
+  useEffect(() => {
+    if (activeDepositPeriodId) depositDateRef.current?.focus();
+  }, [activeDepositPeriodId]);
+
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -1085,8 +1200,10 @@ function DepositView({
         },
         'Depósito registrado com sucesso.',
       )
-    )
+    ) {
       formElement.reset();
+      depositDateRef.current?.focus();
+    }
   }
   return (
     <>
@@ -1109,10 +1226,17 @@ function DepositView({
           title="Preencha os dados do depósito"
           description="O nome do depositante é opcional."
         >
-          <form onSubmit={submit} className="space-y-4">
+          <form
+            ref={depositFormRef}
+            onSubmit={submit}
+            aria-label="Cadastro de depósito"
+            className="space-y-4"
+          >
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <Field label="Data do depósito">
+              <Field label="Data do depósito" hint="DD/MM/AAAA">
                 <Input
+                  ref={depositDateRef}
+                  data-entry-field
                   name="depositDate"
                   type="date"
                   defaultValue={today()}
@@ -1655,15 +1779,19 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
-      <div className="mb-5 flex items-start gap-3">
+    <section className="overflow-hidden rounded-2xl border border-black/15 bg-white shadow-[0_14px_35px_rgba(0,0,0,0.06)]">
+      <div className="flex items-start gap-3 bg-[#17120f] p-4 text-white sm:p-5">
         <StepNumber number="2" />
         <div>
-          <h2 className="font-heading text-lg font-bold">{title}</h2>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+          <h2 className="font-heading text-lg font-extrabold">{title}</h2>
+          <p className="mt-1 text-xs leading-5 text-white/60">{description}</p>
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#d2b8a7]">
+            <Keyboard className="size-3.5" /> Tab avança · Enter confirma o
+            campo
+          </p>
         </div>
       </div>
-      {children}
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }
@@ -1678,8 +1806,8 @@ function RecordsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-black/8 bg-white">
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-100 p-4 sm:p-5">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-black/15 bg-white shadow-[0_14px_35px_rgba(0,0,0,0.06)]">
+      <div className="flex items-start justify-between gap-4 border-b border-black/10 bg-[#eee9e5] p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <StepNumber number="3" />
           <div>
