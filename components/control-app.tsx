@@ -37,6 +37,17 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type {
   ControlData,
   Deposit,
@@ -201,6 +212,7 @@ export function ControlApp() {
   );
   const [periodModal, setPeriodModal] = useState<ModuleName | null>(null);
   const [coverPeriodId, setCoverPeriodId] = useState<string | null>(null);
+  const [periodToClose, setPeriodToClose] = useState<Period | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -286,12 +298,18 @@ export function ControlApp() {
     });
   }
 
-  async function closePeriod(period: Period) {
+  async function confirmClosePeriod() {
+    if (!periodToClose) return;
+
+    const period = periodToClose;
     const success = await act(
       { action: 'close_period', periodId: period.id },
       'Período encerrado. A capa está pronta para impressão.',
     );
-    if (success) setCoverPeriodId(period.id);
+    if (success) {
+      setPeriodToClose(null);
+      setCoverPeriodId(period.id);
+    }
   }
 
   return (
@@ -330,7 +348,7 @@ export function ControlApp() {
                     working={working}
                     act={act}
                     onOpen={() => setPeriodModal('invoices')}
-                    onClosePeriod={closePeriod}
+                    onClosePeriod={setPeriodToClose}
                   />
                 )}
                 {view === 'expenses' && (
@@ -340,7 +358,7 @@ export function ControlApp() {
                     working={working}
                     act={act}
                     onOpen={() => setPeriodModal('expenses')}
-                    onClosePeriod={closePeriod}
+                    onClosePeriod={setPeriodToClose}
                   />
                 )}
                 {view === 'deposits' && (
@@ -350,7 +368,7 @@ export function ControlApp() {
                     working={working}
                     act={act}
                     onOpen={() => setPeriodModal('deposits')}
-                    onClosePeriod={closePeriod}
+                    onClosePeriod={setPeriodToClose}
                   />
                 )}
                 {view === 'history' && (
@@ -376,6 +394,41 @@ export function ControlApp() {
             act={act}
           />
         )}
+        <AlertDialog
+          open={Boolean(periodToClose)}
+          onOpenChange={(open) => {
+            if (!open && !working) setPeriodToClose(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md overflow-hidden p-5 sm:p-6">
+            <AlertDialogHeader>
+              <AlertDialogMedia className="bg-[#eee5df] text-[#765541]">
+                <Archive />
+              </AlertDialogMedia>
+              <AlertDialogTitle className="font-heading text-lg font-extrabold">
+                Encerrar este período?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="leading-6">
+                {periodToClose
+                  ? `O período “${periodToClose.label}” será fechado e enviado ao histórico. Você poderá reabri-lo depois, se precisar corrigir algum lançamento.`
+                  : ''}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-2">
+              <AlertDialogCancel disabled={working} className="h-11">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={working}
+                onClick={() => void confirmClosePeriod()}
+                className="h-11 bg-black text-white hover:bg-zinc-800"
+              >
+                {working ? <Loader2 className="animate-spin" /> : <Archive />}
+                Confirmar encerramento
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
       {coverPeriodId && (
         <PrintCover
@@ -756,7 +809,7 @@ type ModuleProps = {
   working: boolean;
   act: (payload: Record<string, unknown>, success: string) => Promise<boolean>;
   onOpen: () => void;
-  onClosePeriod: (period: Period) => Promise<void>;
+  onClosePeriod: (period: Period) => void;
 };
 
 function PeriodStep({
@@ -808,8 +861,8 @@ function PeriodStep({
             <Button
               disabled={working}
               variant="outline"
-              onClick={() => void onClosePeriod(period)}
-              className="h-11 px-4"
+              onClick={() => onClosePeriod(period)}
+              className="h-11 border-white bg-white px-4 text-black hover:bg-zinc-200 hover:text-black"
             >
               <Archive /> Encerrar
             </Button>
@@ -974,7 +1027,7 @@ function InvoiceView({
               </div>
               <div className="space-y-2">
                 {dueDates.map((date, index) => (
-                  <div key={`${index}-${date}`} className="flex gap-2">
+                  <div key={`due-date-${index}`} className="flex gap-2">
                     <Input
                       type="date"
                       value={date}
@@ -1513,6 +1566,14 @@ function PrintCover({
       : period.module === 'deposits'
         ? deposits.reduce((sum, item) => sum + item.amountCents, 0)
         : null;
+  const printDensity =
+    records.length > 60
+      ? 'print-density-ultra'
+      : records.length > 40
+        ? 'print-density-tight'
+        : records.length > 22
+          ? 'print-density-compact'
+          : '';
 
   return (
     <dialog
@@ -1546,39 +1607,39 @@ function PrintCover({
         </div>
       </div>
 
-      <article className="print-document mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10">
-        <header className="flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-5 text-white">
+      <article
+        className={`print-document ${printDensity} mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10`}
+      >
+        <header className="print-document-header flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-4 text-white">
           <Image
             src="/logo-top-haus.jpg"
             alt="Top Haus"
             width={142}
             height={88}
-            className="h-14 w-auto"
+            className="print-cover-logo h-12 w-auto"
           />
           <div className="text-right">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/60">
               Controle interno
             </p>
-            <h1 className="mt-1 text-xl font-extrabold">
-              Capa de encerramento
+            <h1 className="mt-1 text-lg font-extrabold">
+              Relatório de {moduleInfo[period.module].title.toLowerCase()}
             </h1>
           </div>
         </header>
 
-        <section className="border-x border-b border-black/15 px-6 py-6">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#765541]">
-            {moduleInfo[period.module].title}
-          </p>
-          <h2 className="mt-1 text-2xl font-extrabold">{period.label}</h2>
+        <section className="print-summary border-x border-b border-black/15 px-6 py-5">
+          <h2 className="print-summary-title text-xl font-extrabold">
+            {period.label}
+          </h2>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="print-meta-grid mt-4 grid grid-cols-3 gap-3">
             <PrintMeta label="Abertura" value={dateLabel(period.openedAt)} />
             <PrintMeta label="Fechamento" value={dateLabel(period.closedAt)} />
             <PrintMeta
               label="Lançamentos"
               value={`${records.length} ${records.length === 1 ? 'item' : 'itens'}`}
             />
-            <PrintMeta label="Situação" value="Encerrado" />
           </div>
 
           {total !== null && (
@@ -1598,16 +1659,9 @@ function PrintCover({
           )}
         </section>
 
-        <section className="mt-8">
-          <div className="mb-3 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-zinc-400">
-                Relação completa
-              </p>
-              <h3 className="mt-1 text-lg font-extrabold">
-                Lançamentos do período
-              </h3>
-            </div>
+        <section className="print-records-section mt-5">
+          <div className="print-records-heading mb-2 flex items-end justify-between gap-4">
+            <h3 className="text-base font-extrabold">Lançamentos do período</h3>
             <p className="text-xs font-bold text-zinc-500">
               {records.length} {records.length === 1 ? 'registro' : 'registros'}
             </p>
@@ -1625,17 +1679,6 @@ function PrintCover({
             <PrintDepositTable records={deposits} />
           )}
         </section>
-
-        <footer className="mt-10 flex items-center justify-between gap-4 border-t border-zinc-300 pt-4 text-[10px] text-zinc-400">
-          <p>Top Haus · Documento de controle interno</p>
-          <p>
-            Gerado em{' '}
-            {new Intl.DateTimeFormat('pt-BR', {
-              dateStyle: 'short',
-              timeStyle: 'short',
-            }).format(new Date())}
-          </p>
-        </footer>
       </article>
     </dialog>
   );
@@ -1654,15 +1697,14 @@ function PrintMeta({ label, value }: { label: string; value: string }) {
 
 function PrintInvoiceTable({ records }: { records: Invoice[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-300">
+    <div className="print-table overflow-hidden rounded-xl border border-zinc-300">
       <table className="w-full table-fixed text-left text-[10px]">
         <thead className="bg-black text-white">
           <tr>
-            <PrintTh className="w-[24%]">Fornecedor</PrintTh>
-            <PrintTh className="w-[12%]">Emissão</PrintTh>
-            <PrintTh className="w-[13%]">Nota</PrintTh>
-            <PrintTh className="w-[22%]">Vencimento(s)</PrintTh>
-            <PrintTh className="w-[29%]">Chave de acesso</PrintTh>
+            <PrintTh className="w-[38%]">Fornecedor</PrintTh>
+            <PrintTh className="w-[16%]">Emissão</PrintTh>
+            <PrintTh className="w-[18%]">Nota</PrintTh>
+            <PrintTh className="w-[28%]">Vencimento(s)</PrintTh>
           </tr>
         </thead>
         <tbody>
@@ -1672,9 +1714,6 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
               <PrintTd>{dateLabel(item.issueDate)}</PrintTd>
               <PrintTd>{item.invoiceNumber}</PrintTd>
               <PrintTd>{item.dueDates.map(dateLabel).join(', ')}</PrintTd>
-              <PrintTd className="break-all">
-                {item.accessKey || 'Não informada'}
-              </PrintTd>
             </tr>
           ))}
         </tbody>
@@ -1685,7 +1724,7 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
 
 function PrintExpenseTable({ records }: { records: Expense[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-300">
+    <div className="print-table overflow-hidden rounded-xl border border-zinc-300">
       <table className="w-full table-fixed text-left text-[10px]">
         <thead className="bg-black text-white">
           <tr>
@@ -1712,7 +1751,7 @@ function PrintExpenseTable({ records }: { records: Expense[] }) {
 
 function PrintDepositTable({ records }: { records: Deposit[] }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-300">
+    <div className="print-table overflow-hidden rounded-xl border border-zinc-300">
       <table className="w-full table-fixed text-left text-[10px]">
         <thead className="bg-black text-white">
           <tr>
