@@ -2125,4 +2125,3 @@ function BarcodeScanner({
     </dialog>
   );
 }
-

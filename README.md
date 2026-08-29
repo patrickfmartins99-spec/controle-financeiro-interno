@@ -47,4 +47,3 @@ O armazenamento Netlify Blobs é criado automaticamente no primeiro uso; não ex
 npm run lint
 npm run build
 ```
-
