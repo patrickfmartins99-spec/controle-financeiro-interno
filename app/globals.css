@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist);
-  --font-heading: var(--font-geist);
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-montserrat);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -63,12 +63,19 @@
   }
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
   }
   button,
   a,
   input,
   select {
     -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
   }
 }
 

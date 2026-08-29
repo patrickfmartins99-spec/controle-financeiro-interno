@@ -1,30 +1,47 @@
 # Controle Financeiro Interno — Top Haus
 
-Sistema web privado para substituir os relatórios internos de notas fiscais, despesas e depósitos.
+Sistema web responsivo para substituir os controles internos de notas fiscais, despesas e depósitos.
 
-## O que o sistema controla
+## Recursos
 
-- **Notas fiscais:** fornecedor, emissão, número, chave de acesso opcional e um ou mais vencimentos.
-- **Despesas:** descrição, data, valor e data de baixa opcional.
-- **Depósitos:** data, valor e depositante opcional.
-- **Períodos independentes:** cada relatório pode ser aberto e encerrado separadamente.
-- **Histórico:** períodos encerrados continuam pesquisáveis e podem ser reabertos.
-- **Reenvio de notas:** uma nota antiga pode ser incluída novamente no período atual sem perder o registro original.
-- **Totais corretos:** despesas e depósitos somam somente o período aberto.
+- Períodos independentes para cada relatório.
+- Totais de despesas e depósitos somente do período aberto.
+- Notas fiscais com um ou mais vencimentos.
+- Leitura da chave da nota pela câmera em navegadores compatíveis.
+- Histórico pesquisável e reabertura de períodos.
+- Reenvio de notas antigas sem apagar o registro original.
+- Interface mobile-first com navegação adaptada para telefone, tablet e computador.
+- Dados persistentes com Netlify Blobs.
 
-## Uso local
+## Desenvolvimento local
 
 ```bash
 npm install
 npm run dev
 ```
 
-Abra `http://localhost:3000`.
+O comando inicia o ambiente local da Netlify e disponibiliza também o armazenamento de testes. Os dados locais são separados da produção.
+
+## Publicação na Netlify
+
+1. No painel da Netlify, escolha **Add new project** e depois **Import an existing project**.
+2. Conecte o repositório `patrickfmartins99-spec/controle-financeiro-interno`.
+3. A Netlify reconhecerá o arquivo `netlify.toml` automaticamente.
+4. Confirme a implantação.
+
+Antes de registrar dados reais, ative a proteção de acesso do projeto nas configurações da Netlify. O sistema já solicita aos mecanismos de busca que não indexem suas páginas, mas essa configuração de acesso é o que restringe efetivamente os visitantes.
+
+Configuração detectada:
+
+- Build: `npm run build`
+- Publicação: `.next`
+- Node.js: versão 22
+
+O armazenamento Netlify Blobs é criado automaticamente no primeiro uso; não exige banco externo nem variável secreta.
 
 ## Validação
 
 ```bash
+npm run lint
 npm run build
 ```
-
-Os dados são armazenados em banco D1. A publicação é configurada como privada para uso interno.

@@ -2,28 +2,34 @@
 
 import Image from 'next/image';
 import {
+  type ReactNode,
   type SyntheticEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import {
-  ArchiveRestore,
+  Archive,
+  ArrowRight,
   BanknoteArrowDown,
+  CalendarDays,
   Camera,
-  CalendarRange,
-  CheckCircle2,
+  Check,
   ChevronRight,
+  CircleHelp,
+  FileSearch,
   FileText,
   History,
   LayoutDashboard,
   Loader2,
+  LockKeyhole,
   Plus,
   ReceiptText,
   RotateCcw,
-  Search,
   ScanLine,
+  Search,
   X,
 } from 'lucide-react';
 
@@ -31,6 +37,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type {
   ControlData,
+  Deposit,
+  Expense,
   Invoice,
   ModuleName,
   Period,
@@ -46,42 +54,92 @@ const emptyData: ControlData = {
 
 const moduleInfo: Record<
   ModuleName,
-  { title: string; singular: string; icon: typeof FileText }
+  {
+    title: string;
+    shortTitle: string;
+    singular: string;
+    description: string;
+    icon: typeof FileText;
+  }
 > = {
-  invoices: { title: 'Notas fiscais', singular: 'nota fiscal', icon: FileText },
-  expenses: { title: 'Despesas', singular: 'despesa', icon: ReceiptText },
+  invoices: {
+    title: 'Notas fiscais',
+    shortTitle: 'Notas',
+    singular: 'nota fiscal',
+    description: 'Confirme o recebimento e acompanhe os vencimentos.',
+    icon: FileText,
+  },
+  expenses: {
+    title: 'Despesas',
+    shortTitle: 'Despesas',
+    singular: 'despesa',
+    description: 'Registre os gastos e a data da baixa.',
+    icon: ReceiptText,
+  },
   deposits: {
     title: 'Depósitos',
+    shortTitle: 'Depósitos',
     singular: 'depósito',
+    description: 'Controle os valores depositados no período.',
     icon: BanknoteArrowDown,
   },
 };
 
-const navItems: Array<{ id: ViewName; label: string; icon: typeof FileText }> =
-  [
-    { id: 'overview', label: 'Visão geral', icon: LayoutDashboard },
-    { id: 'invoices', label: 'Notas fiscais', icon: FileText },
-    { id: 'expenses', label: 'Despesas', icon: ReceiptText },
-    { id: 'deposits', label: 'Depósitos', icon: BanknoteArrowDown },
-    { id: 'history', label: 'Histórico', icon: History },
-  ];
+const navItems: Array<{
+  id: ViewName;
+  label: string;
+  mobileLabel: string;
+  icon: typeof FileText;
+}> = [
+  {
+    id: 'overview',
+    label: 'Início',
+    mobileLabel: 'Início',
+    icon: LayoutDashboard,
+  },
+  {
+    id: 'invoices',
+    label: 'Notas fiscais',
+    mobileLabel: 'Notas',
+    icon: FileText,
+  },
+  {
+    id: 'expenses',
+    label: 'Despesas',
+    mobileLabel: 'Despesas',
+    icon: ReceiptText,
+  },
+  {
+    id: 'deposits',
+    label: 'Depósitos',
+    mobileLabel: 'Depósitos',
+    icon: BanknoteArrowDown,
+  },
+  {
+    id: 'history',
+    label: 'Histórico',
+    mobileLabel: 'Histórico',
+    icon: History,
+  },
+];
 
-const formatDate = (date?: string | null) =>
-  date
-    ? new Intl.DateTimeFormat('pt-BR').format(
-        new Date(`${date.slice(0, 10)}T12:00:00`),
-      )
-    : '—';
-
-const formatMoney = (cents: number) =>
+const currency = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
     cents / 100,
   );
 
+const dateLabel = (value?: string | null) =>
+  value
+    ? new Intl.DateTimeFormat('pt-BR').format(
+        new Date(`${value.slice(0, 10)}T12:00:00`),
+      )
+    : 'Não informada';
+
 function today() {
   const date = new Date();
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 export function ControlApp() {
@@ -89,10 +147,12 @@ export function ControlApp() {
   const [data, setData] = useState<ControlData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(
+    null,
+  );
   const [periodModal, setPeriodModal] = useState<ModuleName | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const response = await fetch('/api/control', { cache: 'no-store' });
       const result = (await response.json()) as ControlData & {
@@ -102,26 +162,25 @@ export function ControlApp() {
         throw new Error(result.error ?? 'Não foi possível carregar os dados.');
       setData(result);
     } catch (cause) {
-      setMessage(
-        cause instanceof Error
-          ? cause.message
-          : 'Não foi possível carregar os dados.',
-      );
+      setNotice({
+        text:
+          cause instanceof Error
+            ? cause.message
+            : 'Não foi possível carregar os dados.',
+        error: true,
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => void load());
-  }, []);
+  }, [load]);
 
-  async function act(
-    payload: Record<string, unknown>,
-    successMessage?: string,
-  ) {
+  async function act(payload: Record<string, unknown>, success: string) {
     setWorking(true);
-    setMessage(null);
+    setNotice(null);
     try {
       const response = await fetch('/api/control', {
         method: 'POST',
@@ -135,14 +194,16 @@ export function ControlApp() {
         throw new Error(result.error ?? 'Não foi possível concluir a ação.');
       setData(result);
       setPeriodModal(null);
-      if (successMessage) setMessage(successMessage);
+      setNotice({ text: success, error: false });
       return true;
     } catch (cause) {
-      setMessage(
-        cause instanceof Error
-          ? cause.message
-          : 'Não foi possível concluir a ação.',
-      );
+      setNotice({
+        text:
+          cause instanceof Error
+            ? cause.message
+            : 'Não foi possível concluir a ação.',
+        error: true,
+      });
       return false;
     } finally {
       setWorking(false);
@@ -162,100 +223,28 @@ export function ControlApp() {
     [data.periods],
   );
 
+  function navigate(next: ViewName) {
+    setView(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   return (
-    <div className="min-h-screen bg-[#f4f2ef] text-zinc-950">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-black text-white lg:hidden">
-        <div className="flex h-16 items-center justify-between px-4">
-          <Image
-            src="/logo-top-haus.jpg"
-            alt="Top Haus"
-            width={90}
-            height={56}
-            className="h-11 w-auto"
-            priority
-          />
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">
-            Controle interno
-          </span>
-        </div>
-      </header>
+    <div className="min-h-dvh bg-[#f5f4f2] text-[#171717]">
+      <DesktopSidebar view={view} onNavigate={navigate} />
+      <MobileHeader />
 
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-black text-white lg:flex">
-        <div className="border-b border-white/10 px-7 py-7">
-          <Image
-            src="/logo-top-haus.jpg"
-            alt="Top Haus"
-            width={150}
-            height={94}
-            className="h-20 w-auto"
-            priority
-          />
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-            Controle financeiro
-          </p>
-        </div>
-        <nav
-          className="flex-1 space-y-1 px-3 py-6"
-          aria-label="Navegação principal"
-        >
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = view === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setView(item.id)}
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm transition ${active ? 'bg-[#765541] text-white' : 'text-white/65 hover:bg-white/7 hover:text-white'}`}
-              >
-                <Icon className="size-4" />
-                <span className="font-medium">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="border-t border-white/10 px-7 py-5 text-xs leading-relaxed text-white/45">
-          Os períodos de cada relatório funcionam de forma independente.
-        </div>
-      </aside>
-
-      <main className="lg:ml-64">
-        <div className="mx-auto min-h-screen max-w-[1500px] px-4 py-5 sm:px-7 sm:py-8 lg:px-10">
-          <div className="mb-6 flex gap-2 overflow-x-auto pb-2 lg:hidden">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setView(item.id)}
-                  className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium ${view === item.id ? 'bg-[#765541] text-white' : 'bg-white text-zinc-600'}`}
-                >
-                  <Icon className="size-4" /> {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {message && (
-            <div className="mb-5 flex items-center justify-between rounded-xl border border-[#765541]/25 bg-[#efe7e1] px-4 py-3 text-sm text-[#4b3427]">
-              <span>{message}</span>
-              <button
-                onClick={() => setMessage(null)}
-                aria-label="Fechar aviso"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          )}
-
+      <main className="pb-28 lg:ml-[252px] lg:pb-10">
+        <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+          {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
           {loading ? (
-            <LoadingState />
+            <Loading />
           ) : (
             <>
               {view === 'overview' && (
                 <Overview
                   data={data}
-                  openPeriods={openPeriods}
-                  onNavigate={setView}
+                  periods={openPeriods}
+                  onNavigate={navigate}
                   onOpen={setPeriodModal}
                 />
               )}
@@ -289,9 +278,9 @@ export function ControlApp() {
               {view === 'history' && (
                 <HistoryView
                   data={data}
+                  currentInvoicePeriod={openPeriods.invoices}
                   working={working}
                   act={act}
-                  openInvoicePeriod={openPeriods.invoices}
                 />
               )}
             </>
@@ -299,6 +288,7 @@ export function ControlApp() {
         </div>
       </main>
 
+      <MobileNavigation view={view} onNavigate={navigate} />
       {periodModal && (
         <OpenPeriodModal
           module={periodModal}
@@ -311,16 +301,154 @@ export function ControlApp() {
   );
 }
 
-function LoadingState() {
+function DesktopSidebar({
+  view,
+  onNavigate,
+}: {
+  view: ViewName;
+  onNavigate: (view: ViewName) => void;
+}) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center text-sm text-zinc-500">
-      <Loader2 className="mr-2 size-5 animate-spin" /> Carregando controle
-      interno…
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-[#0b0b0b] text-white lg:flex">
+      <div className="px-7 pb-6 pt-7">
+        <Image
+          src="/logo-top-haus.jpg"
+          alt="Top Haus"
+          width={142}
+          height={88}
+          className="h-[72px] w-auto"
+          priority
+        />
+        <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">
+          Controle financeiro
+        </p>
+      </div>
+      <div className="mx-5 h-px bg-white/10" />
+      <nav
+        className="flex-1 space-y-1 px-3 py-5"
+        aria-label="Navegação principal"
+      >
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = item.id === view;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-sm font-medium transition-colors ${active ? 'bg-[#84614c] text-white' : 'text-white/65 hover:bg-white/8 hover:text-white'}`}
+            >
+              <Icon className="size-[18px]" />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+      <div className="m-4 rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="flex items-center gap-2 text-xs font-semibold text-white/80">
+          <LockKeyhole className="size-4" /> Controle interno
+        </div>
+        <p className="mt-2 text-[11px] leading-5 text-white/45">
+          Cada relatório possui seu próprio período e histórico.
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+function MobileHeader() {
+  return (
+    <header className="sticky top-0 z-30 border-b border-black/8 bg-white/95 backdrop-blur lg:hidden">
+      <div className="flex h-[68px] items-center justify-between px-4">
+        <div className="rounded-lg bg-black px-3 py-1.5">
+          <Image
+            src="/logo-top-haus.jpg"
+            alt="Top Haus"
+            width={72}
+            height={45}
+            className="h-9 w-auto"
+            priority
+          />
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-semibold">Controle financeiro</p>
+          <p className="mt-0.5 text-[10px] text-zinc-400">Uso interno</p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function MobileNavigation({
+  view,
+  onNavigate,
+}: {
+  view: ViewName;
+  onNavigate: (view: ViewName) => void;
+}) {
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-white/95 px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(0,0,0,0.06)] backdrop-blur lg:hidden"
+      aria-label="Navegação principal"
+    >
+      <div className="grid grid-cols-5">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = view === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className={`flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold transition-colors ${active ? 'text-[#765541]' : 'text-zinc-400'}`}
+            >
+              <span
+                className={`flex h-7 w-10 items-center justify-center rounded-full ${active ? 'bg-[#eee5df]' : ''}`}
+              >
+                <Icon className="size-[18px]" />
+              </span>
+              {item.mobileLabel}
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function Notice({
+  notice,
+  onClose,
+}: {
+  notice: { text: string; error: boolean };
+  onClose: () => void;
+}) {
+  return (
+    <output
+      className={`mb-5 flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-sm ${notice.error ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}
+    >
+      <div className="flex items-center gap-2">
+        {notice.error ? (
+          <CircleHelp className="size-4 shrink-0" />
+        ) : (
+          <Check className="size-4 shrink-0" />
+        )}
+        <span>{notice.text}</span>
+      </div>
+      <button onClick={onClose} aria-label="Fechar aviso">
+        <X className="size-4" />
+      </button>
+    </output>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="flex min-h-[65vh] items-center justify-center text-sm text-zinc-500">
+      <Loader2 className="mr-2 size-5 animate-spin" /> Carregando seu controle…
     </div>
   );
 }
 
-function PageTitle({
+function PageHeading({
   eyebrow,
   title,
   description,
@@ -330,160 +458,214 @@ function PageTitle({
   description: string;
 }) {
   return (
-    <div className="mb-7">
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[#765541]">
+    <header className="mb-6 sm:mb-8">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#765541]">
         {eyebrow}
       </p>
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+      <h1 className="font-heading text-[28px] font-bold leading-tight tracking-[-0.03em] sm:text-4xl">
         {title}
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 sm:text-[15px]">
         {description}
       </p>
-    </div>
+    </header>
   );
 }
 
 function Overview({
   data,
-  openPeriods,
+  periods,
   onNavigate,
   onOpen,
 }: {
   data: ControlData;
-  openPeriods: Record<ModuleName, Period | null>;
+  periods: Record<ModuleName, Period | null>;
   onNavigate: (view: ViewName) => void;
   onOpen: (module: ModuleName) => void;
 }) {
-  const currentExpenses = openPeriods.expenses
-    ? data.expenses.filter((item) => item.periodId === openPeriods.expenses?.id)
-    : [];
-  const currentDeposits = openPeriods.deposits
-    ? data.deposits.filter((item) => item.periodId === openPeriods.deposits?.id)
-    : [];
-  const currentInvoices = openPeriods.invoices
-    ? data.invoices.filter((item) => item.periodId === openPeriods.invoices?.id)
-    : [];
+  const entries = {
+    invoices: periods.invoices
+      ? data.invoices.filter((item) => item.periodId === periods.invoices?.id)
+      : [],
+    expenses: periods.expenses
+      ? data.expenses.filter((item) => item.periodId === periods.expenses?.id)
+      : [],
+    deposits: periods.deposits
+      ? data.deposits.filter((item) => item.periodId === periods.deposits?.id)
+      : [],
+  };
+
   return (
     <>
-      <PageTitle
-        eyebrow="Top Haus"
-        title="Controle financeiro interno"
-        description="Acompanhe o que está aberto hoje e encerre cada relatório no momento certo, sem misturar períodos."
+      <PageHeading
+        eyebrow="Visão geral"
+        title="O que você quer registrar hoje?"
+        description="Escolha um relatório abaixo. Você verá somente os lançamentos do período que está aberto."
       />
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ModuleCard
-          module="invoices"
-          period={openPeriods.invoices}
-          count={currentInvoices.length}
-          onNavigate={onNavigate}
-          onOpen={onOpen}
-        />
-        <ModuleCard
-          module="expenses"
-          period={openPeriods.expenses}
-          count={currentExpenses.length}
-          total={currentExpenses.reduce(
-            (sum, item) => sum + item.amountCents,
-            0,
-          )}
-          onNavigate={onNavigate}
-          onOpen={onOpen}
-        />
-        <ModuleCard
-          module="deposits"
-          period={openPeriods.deposits}
-          count={currentDeposits.length}
-          total={currentDeposits.reduce(
-            (sum, item) => sum + item.amountCents,
-            0,
-          )}
-          onNavigate={onNavigate}
-          onOpen={onOpen}
-        />
+      <div className="grid gap-3 lg:grid-cols-3 lg:gap-5">
+        {(Object.keys(moduleInfo) as ModuleName[]).map((module) => (
+          <OverviewCard
+            key={module}
+            module={module}
+            period={periods[module]}
+            count={entries[module].length}
+            total={
+              module === 'expenses'
+                ? (entries.expenses as Expense[]).reduce(
+                    (sum, item) => sum + item.amountCents,
+                    0,
+                  )
+                : module === 'deposits'
+                  ? (entries.deposits as Deposit[]).reduce(
+                      (sum, item) => sum + item.amountCents,
+                      0,
+                    )
+                  : undefined
+            }
+            onClick={() =>
+              periods[module] ? onNavigate(module) : onOpen(module)
+            }
+          />
+        ))}
       </div>
-      <section className="mt-6 grid gap-5 rounded-2xl border border-zinc-200 bg-white p-6 md:grid-cols-[1fr_auto] md:items-center">
-        <div>
-          <div className="mb-3 flex size-10 items-center justify-center rounded-xl bg-[#efe7e1] text-[#765541]">
-            <Search className="size-5" />
+
+      <section className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl border border-black/8 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#765541]">
+                Como funciona
+              </p>
+              <h2 className="font-heading mt-1 text-xl font-bold">
+                Um fluxo simples em três passos
+              </h2>
+            </div>
+            <CircleHelp className="size-6 text-zinc-300" />
           </div>
-          <h2 className="text-lg font-semibold">
-            Precisa localizar uma nota antiga?
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            A busca percorre todos os períodos encerrados e permite reenviar a
-            nota para o período atual.
-          </p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <GuideStep
+              number="1"
+              title="Abra o período"
+              text="Cada relatório abre e fecha separadamente."
+            />
+            <GuideStep
+              number="2"
+              title="Registre"
+              text="Inclua somente as informações essenciais."
+            />
+            <GuideStep
+              number="3"
+              title="Encerre"
+              text="O período sai da tela atual e vai para o histórico."
+            />
+          </div>
         </div>
-        <Button
-          size="lg"
+        <button
           onClick={() => onNavigate('history')}
-          className="bg-black px-5 hover:bg-zinc-800"
+          className="group flex min-h-[180px] flex-col justify-between rounded-2xl bg-[#17120f] p-6 text-left text-white transition-transform hover:-translate-y-0.5"
         >
-          Abrir histórico <ChevronRight />
-        </Button>
+          <div className="flex items-start justify-between">
+            <FileSearch className="size-7 text-[#c6a891]" />
+            <ArrowRight className="size-5 text-white/40 transition-transform group-hover:translate-x-1" />
+          </div>
+          <div>
+            <h2 className="font-heading text-xl font-bold">
+              Localizar uma nota antiga
+            </h2>
+            <p className="mt-2 max-w-sm text-sm leading-6 text-white/55">
+              Pesquise por fornecedor ou número e reenvie para o período atual
+              quando necessário.
+            </p>
+          </div>
+        </button>
       </section>
     </>
   );
 }
 
-function ModuleCard({
+function OverviewCard({
   module,
   period,
   count,
   total,
-  onNavigate,
-  onOpen,
+  onClick,
 }: {
   module: ModuleName;
   period: Period | null;
   count: number;
   total?: number;
-  onNavigate: (view: ViewName) => void;
-  onOpen: (module: ModuleName) => void;
+  onClick: () => void;
 }) {
   const info = moduleInfo[module];
   const Icon = info.icon;
   return (
-    <article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_8px_30px_rgba(24,24,27,0.04)]">
-      <div className="flex items-start justify-between">
-        <div className="flex size-11 items-center justify-center rounded-xl bg-black text-white">
+    <button
+      onClick={onClick}
+      aria-label={`${period ? 'Abrir' : 'Iniciar'} relatório de ${info.title.toLocaleLowerCase('pt-BR')}`}
+      className="group flex min-h-[184px] flex-col rounded-2xl border border-black/8 bg-white p-5 text-left shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition hover:-translate-y-0.5 hover:border-[#765541]/30"
+    >
+      <div className="flex w-full items-start justify-between">
+        <span className="flex size-11 items-center justify-center rounded-xl bg-[#eee7e2] text-[#765541]">
           <Icon className="size-5" />
-        </div>
+        </span>
         <span
-          className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] ${period ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}
+          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${period ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}
         >
-          {period ? 'Período aberto' : 'Sem período'}
+          {period ? 'Aberto' : 'Fechado'}
         </span>
       </div>
-      <h2 className="mt-5 text-xl font-semibold">{info.title}</h2>
-      <p className="mt-1 min-h-5 text-sm text-zinc-500">
-        {period?.label ?? 'Abra um período para começar os lançamentos.'}
-      </p>
-      <div className="mt-6 flex items-end justify-between border-t border-zinc-100 pt-5">
+      <div className="mt-5 flex w-full flex-1 items-end justify-between gap-3">
         <div>
-          <p className="text-2xl font-semibold">
-            {total === undefined ? count : formatMoney(total)}
+          <h2 className="font-heading text-lg font-bold">{info.title}</h2>
+          <p className="mt-1 line-clamp-1 text-xs text-zinc-500">
+            {period?.label ?? 'Toque para abrir um período'}
           </p>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-3 text-sm font-semibold">
             {total === undefined
               ? `${count} registro${count === 1 ? '' : 's'}`
-              : `${count} lançamento${count === 1 ? '' : 's'} no período`}
+              : currency(total)}
           </p>
         </div>
-        <Button
-          variant={period ? 'outline' : 'default'}
-          onClick={() => (period ? onNavigate(module) : onOpen(module))}
-        >
-          {period ? 'Ver relatório' : 'Abrir período'}
-        </Button>
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-400 transition group-hover:border-[#765541] group-hover:text-[#765541]">
+          <ChevronRight className="size-4" />
+        </span>
       </div>
-    </article>
+    </button>
   );
 }
 
-function PeriodBar({
-  module: _module,
+function GuideStep({
+  number,
+  title,
+  text,
+}: {
+  number: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="flex gap-3 sm:block">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-black text-xs font-bold text-white">
+        {number}
+      </span>
+      <div className="sm:mt-3">
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-zinc-500">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+type ModuleProps = {
+  data: ControlData;
+  period: Period | null;
+  working: boolean;
+  act: (payload: Record<string, unknown>, success: string) => Promise<boolean>;
+  onOpen: () => void;
+};
+
+function PeriodStep({
+  module,
   period,
   count,
   total,
@@ -496,112 +678,126 @@ function PeriodBar({
   count: number;
   total?: number;
   working: boolean;
-  act: (payload: Record<string, unknown>, message?: string) => Promise<boolean>;
+  act: ModuleProps['act'];
   onOpen: () => void;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 rounded-2xl bg-black p-5 text-white sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">
-          Período atual
-        </p>
-        <p className="mt-1 text-xl font-semibold">
-          {period?.label ?? 'Nenhum período aberto'}
-        </p>
-        <p className="mt-1 text-xs text-white/50">
-          {period
-            ? `Aberto em ${formatDate(period.openedAt)}`
-            : 'Os lançamentos ficam disponíveis após a abertura.'}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
-        <div className="text-left sm:text-right">
-          <p className="text-lg font-semibold">
-            {total === undefined
-              ? `${count} item${count === 1 ? '' : 's'}`
-              : formatMoney(total)}
-          </p>
-          <p className="text-xs text-white/45">somente neste período</p>
+    <section className="mb-5 rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <StepNumber number="1" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-400">
+              Confirme o período
+            </p>
+            <h2 className="font-heading mt-1 text-lg font-bold">
+              {period?.label ?? 'Nenhum período aberto'}
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              {period
+                ? `Aberto em ${dateLabel(period.openedAt)} · ${count} lançamento${count === 1 ? '' : 's'}`
+                : `Abra um período de ${moduleInfo[module].title.toLocaleLowerCase('pt-BR')} para começar.`}
+            </p>
+          </div>
         </div>
-        {period ? (
-          <Button
-            disabled={working}
-            variant="secondary"
-            onClick={() =>
-              act(
-                { action: 'close_period', periodId: period.id },
-                'Período encerrado e guardado no histórico.',
-              )
-            }
-          >
-            <ArchiveRestore /> Encerrar período
-          </Button>
-        ) : (
-          <Button
-            disabled={working}
-            onClick={onOpen}
-            className="bg-[#8a6954] hover:bg-[#765541]"
-          >
-            <Plus /> Abrir período
-          </Button>
-        )}
+        <div className="flex items-center justify-between gap-4 border-t border-zinc-100 pt-4 sm:border-0 sm:pt-0">
+          {total !== undefined && period && (
+            <div className="sm:text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-400">
+                Total aberto
+              </p>
+              <p className="mt-0.5 text-lg font-bold">{currency(total)}</p>
+            </div>
+          )}
+          {period ? (
+            <Button
+              disabled={working}
+              variant="outline"
+              onClick={() =>
+                void act(
+                  { action: 'close_period', periodId: period.id },
+                  'Período encerrado e guardado no histórico.',
+                )
+              }
+              className="h-11 px-4"
+            >
+              <Archive /> Encerrar
+            </Button>
+          ) : (
+            <Button
+              disabled={working}
+              onClick={onOpen}
+              className="h-11 bg-black px-4 hover:bg-zinc-800"
+            >
+              <Plus /> Abrir período
+            </Button>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
-  const current = period
+function InvoiceView({ data, period, working, act, onOpen }: ModuleProps) {
+  const records = period
     ? data.invoices.filter((item) => item.periodId === period.id)
     : [];
   const [dueDates, setDueDates] = useState([today()]);
   const [accessKey, setAccessKey] = useState('');
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanner, setScanner] = useState(false);
+
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const ok = await act(
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const success = await act(
       {
         action: 'add_invoice',
         supplier: form.get('supplier'),
         issueDate: form.get('issueDate'),
         invoiceNumber: form.get('invoiceNumber'),
-        accessKey: form.get('accessKey'),
+        accessKey,
         dueDates,
       },
-      'Nota fiscal registrada.',
+      'Nota fiscal registrada com sucesso.',
     );
-    if (ok) {
-      event.currentTarget.reset();
-      setDueDates([today()]);
+    if (success) {
+      formElement.reset();
       setAccessKey('');
+      setDueDates([today()]);
     }
   }
+
   return (
     <>
-      <PageTitle
+      <PageHeading
         eyebrow="Relatório"
         title="Notas fiscais"
-        description="Registre o recebimento da nota e todos os vencimentos. O valor não é necessário neste controle."
+        description="Registre a confirmação de recebimento e informe todos os vencimentos da nota."
       />
-      <PeriodBar
+      <PeriodStep
         module="invoices"
         period={period}
-        count={current.length}
+        count={records.length}
         working={working}
         act={act}
         onOpen={onOpen}
       />
-      <div className="grid gap-6 2xl:grid-cols-[420px_minmax(0,1fr)]">
-        <FormCard
-          title="Registrar nota"
-          subtitle="Campos essenciais para confirmar o recebimento."
+      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <FormSection
+          title="Preencha os dados da nota"
+          description="O valor da nota não é necessário neste controle."
         >
           <form onSubmit={submit} className="space-y-4">
             <Field label="Fornecedor">
-              <Input name="supplier" required disabled={!period || working} />
+              <Input
+                name="supplier"
+                placeholder="Ex.: Distribuidora Central"
+                required
+                disabled={!period || working}
+              />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data de emissão">
                 <Input
                   name="issueDate"
@@ -614,15 +810,15 @@ function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
               <Field label="Número da nota">
                 <Input
                   name="invoiceNumber"
+                  placeholder="Ex.: 15842"
                   required
                   disabled={!period || working}
                 />
               </Field>
             </div>
-            <Field label="Chave de acesso / código de barras" hint="opcional">
+            <Field label="Chave de acesso" hint="opcional">
               <div className="flex gap-2">
                 <Input
-                  name="accessKey"
                   inputMode="numeric"
                   maxLength={44}
                   placeholder="44 dígitos"
@@ -637,39 +833,39 @@ function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
                 <Button
                   type="button"
                   variant="outline"
-                  size="lg"
+                  onClick={() => setScanner(true)}
                   disabled={!period || working}
-                  onClick={() => setScannerOpen(true)}
-                  title="Ler código com a câmera"
+                  className="h-11 shrink-0 px-3"
                 >
-                  <Camera /> <span className="hidden sm:inline">Ler</span>
+                  <Camera />
+                  <span className="sr-only sm:not-sr-only">Ler</span>
                 </Button>
               </div>
             </Field>
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="text-sm font-medium">
+                <label className="text-sm font-semibold">
                   Vencimento{dueDates.length > 1 ? 's' : ''}
                 </label>
                 <button
                   type="button"
-                  onClick={() => setDueDates([...dueDates, today()])}
-                  className="text-xs font-semibold text-[#765541]"
                   disabled={!period}
+                  onClick={() => setDueDates([...dueDates, today()])}
+                  className="text-xs font-bold text-[#765541]"
                 >
-                  + adicionar vencimento
+                  + outro vencimento
                 </button>
               </div>
               <div className="space-y-2">
                 {dueDates.map((date, index) => (
-                  <div key={index} className="flex gap-2">
+                  <div key={`${index}-${date}`} className="flex gap-2">
                     <Input
                       type="date"
                       value={date}
                       onChange={(event) =>
                         setDueDates(
-                          dueDates.map((item, i) =>
-                            i === index ? event.target.value : item,
+                          dueDates.map((item, current) =>
+                            current === index ? event.target.value : item,
                           ),
                         )
                       }
@@ -679,11 +875,14 @@ function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
                     {dueDates.length > 1 && (
                       <Button
                         type="button"
-                        size="icon"
                         variant="ghost"
+                        size="icon"
                         onClick={() =>
-                          setDueDates(dueDates.filter((_, i) => i !== index))
+                          setDueDates(
+                            dueDates.filter((_, current) => current !== index),
+                          )
                         }
+                        className="h-11 w-11"
                       >
                         <X />
                       </Button>
@@ -692,32 +891,29 @@ function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
                 ))}
               </div>
             </div>
-            <Button
-              type="submit"
-              size="lg"
-              disabled={!period || working}
-              className="w-full bg-black hover:bg-zinc-800"
-            >
-              {working ? <Loader2 className="animate-spin" /> : <Plus />}{' '}
+            <SubmitButton disabled={!period || working} working={working}>
               Registrar nota
-            </Button>
-            {!period && <FormDisabled />}
+            </SubmitButton>
+            {!period && <DisabledHint />}
           </form>
-        </FormCard>
-        <DataPanel title="Notas do período" count={current.length}>
-          {current.length ? (
-            <InvoiceTable invoices={current} />
+        </FormSection>
+        <RecordsSection
+          title="Confira as notas do período"
+          count={records.length}
+        >
+          {records.length ? (
+            <InvoiceRecords records={records} />
           ) : (
-            <EmptyTable text="Nenhuma nota registrada neste período." />
+            <EmptyRecords text="As notas registradas neste período aparecerão aqui." />
           )}
-        </DataPanel>
+        </RecordsSection>
       </div>
-      {scannerOpen && (
+      {scanner && (
         <BarcodeScanner
-          onClose={() => setScannerOpen(false)}
+          onClose={() => setScanner(false)}
           onRead={(value) => {
             setAccessKey(value.replace(/\D/g, '').slice(0, 44));
-            setScannerOpen(false);
+            setScanner(false);
           }}
         />
       )}
@@ -725,52 +921,60 @@ function InvoiceView({ data, period, working, act, onOpen }: ViewProps) {
   );
 }
 
-function ExpenseView({ data, period, working, act, onOpen }: ViewProps) {
-  const current = period
+function ExpenseView({ data, period, working, act, onOpen }: ModuleProps) {
+  const records = period
     ? data.expenses.filter((item) => item.periodId === period.id)
     : [];
-  const total = current.reduce((sum, item) => sum + item.amountCents, 0);
+  const total = records.reduce((sum, item) => sum + item.amountCents, 0);
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const ok = await act(
-      {
-        action: 'add_expense',
-        name: form.get('name'),
-        expenseDate: form.get('expenseDate'),
-        amount: form.get('amount'),
-        settledDate: form.get('settledDate'),
-      },
-      'Despesa registrada.',
-    );
-    if (ok) event.currentTarget.reset();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    if (
+      await act(
+        {
+          action: 'add_expense',
+          name: form.get('name'),
+          expenseDate: form.get('expenseDate'),
+          amount: form.get('amount'),
+          settledDate: form.get('settledDate'),
+        },
+        'Despesa registrada com sucesso.',
+      )
+    )
+      formElement.reset();
   }
   return (
     <>
-      <PageTitle
+      <PageHeading
         eyebrow="Relatório"
         title="Despesas"
-        description="A soma considera apenas os lançamentos do período que está aberto agora."
+        description="O total abaixo considera exclusivamente o período que está aberto."
       />
-      <PeriodBar
+      <PeriodStep
         module="expenses"
         period={period}
-        count={current.length}
+        count={records.length}
         total={total}
         working={working}
         act={act}
         onOpen={onOpen}
       />
-      <div className="grid gap-6 2xl:grid-cols-[420px_minmax(0,1fr)]">
-        <FormCard
-          title="Registrar despesa"
-          subtitle="A data da baixa pode ficar em branco."
+      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <FormSection
+          title="Preencha os dados da despesa"
+          description="A data da baixa pode ser informada depois."
         >
           <form onSubmit={submit} className="space-y-4">
             <Field label="Nome da despesa">
-              <Input name="name" required disabled={!period || working} />
+              <Input
+                name="name"
+                placeholder="Ex.: Material de limpeza"
+                required
+                disabled={!period || working}
+              />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data da despesa">
                 <Input
                   name="expenseDate"
@@ -799,93 +1003,72 @@ function ExpenseView({ data, period, working, act, onOpen }: ViewProps) {
                 disabled={!period || working}
               />
             </Field>
-            <Button
-              type="submit"
-              size="lg"
-              disabled={!period || working}
-              className="w-full bg-black hover:bg-zinc-800"
-            >
-              {working ? <Loader2 className="animate-spin" /> : <Plus />}{' '}
+            <SubmitButton disabled={!period || working} working={working}>
               Registrar despesa
-            </Button>
-            {!period && <FormDisabled />}
+            </SubmitButton>
+            {!period && <DisabledHint />}
           </form>
-        </FormCard>
-        <DataPanel title="Despesas do período" count={current.length}>
-          {current.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <Th>Despesa</Th>
-                    <Th>Data</Th>
-                    <Th>Valor</Th>
-                    <Th>Baixa</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {current.map((item) => (
-                    <tr key={item.id} className="border-t border-zinc-100">
-                      <Td strong>{item.name}</Td>
-                      <Td>{formatDate(item.expenseDate)}</Td>
-                      <Td strong>{formatMoney(item.amountCents)}</Td>
-                      <Td>{formatDate(item.settledDate)}</Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        </FormSection>
+        <RecordsSection
+          title="Confira as despesas do período"
+          count={records.length}
+        >
+          {records.length ? (
+            <ExpenseRecords records={records} />
           ) : (
-            <EmptyTable text="Nenhuma despesa registrada neste período." />
+            <EmptyRecords text="As despesas registradas neste período aparecerão aqui." />
           )}
-        </DataPanel>
+        </RecordsSection>
       </div>
     </>
   );
 }
 
-function DepositView({ data, period, working, act, onOpen }: ViewProps) {
-  const current = period
+function DepositView({ data, period, working, act, onOpen }: ModuleProps) {
+  const records = period
     ? data.deposits.filter((item) => item.periodId === period.id)
     : [];
-  const total = current.reduce((sum, item) => sum + item.amountCents, 0);
+  const total = records.reduce((sum, item) => sum + item.amountCents, 0);
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const ok = await act(
-      {
-        action: 'add_deposit',
-        depositDate: form.get('depositDate'),
-        amount: form.get('amount'),
-        depositor: form.get('depositor'),
-      },
-      'Depósito registrado.',
-    );
-    if (ok) event.currentTarget.reset();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    if (
+      await act(
+        {
+          action: 'add_deposit',
+          depositDate: form.get('depositDate'),
+          amount: form.get('amount'),
+          depositor: form.get('depositor'),
+        },
+        'Depósito registrado com sucesso.',
+      )
+    )
+      formElement.reset();
   }
   return (
     <>
-      <PageTitle
+      <PageHeading
         eyebrow="Relatório"
         title="Depósitos"
-        description="Acompanhe somente a data, o valor e, quando necessário, quem fez o depósito."
+        description="Registre o valor, a data e o depositante somente quando for necessário."
       />
-      <PeriodBar
+      <PeriodStep
         module="deposits"
         period={period}
-        count={current.length}
+        count={records.length}
         total={total}
         working={working}
         act={act}
         onOpen={onOpen}
       />
-      <div className="grid gap-6 2xl:grid-cols-[420px_minmax(0,1fr)]">
-        <FormCard
-          title="Registrar depósito"
-          subtitle="O nome do depositante é opcional."
+      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <FormSection
+          title="Preencha os dados do depósito"
+          description="O nome do depositante é opcional."
         >
           <form onSubmit={submit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data do depósito">
                 <Input
                   name="depositDate"
@@ -908,46 +1091,28 @@ function DepositView({ data, period, working, act, onOpen }: ViewProps) {
               </Field>
             </div>
             <Field label="Depositante" hint="opcional">
-              <Input name="depositor" disabled={!period || working} />
+              <Input
+                name="depositor"
+                placeholder="Nome de quem depositou"
+                disabled={!period || working}
+              />
             </Field>
-            <Button
-              type="submit"
-              size="lg"
-              disabled={!period || working}
-              className="w-full bg-black hover:bg-zinc-800"
-            >
-              {working ? <Loader2 className="animate-spin" /> : <Plus />}{' '}
+            <SubmitButton disabled={!period || working} working={working}>
               Registrar depósito
-            </Button>
-            {!period && <FormDisabled />}
+            </SubmitButton>
+            {!period && <DisabledHint />}
           </form>
-        </FormCard>
-        <DataPanel title="Depósitos do período" count={current.length}>
-          {current.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <Th>Data</Th>
-                    <Th>Depositante</Th>
-                    <Th>Valor</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {current.map((item) => (
-                    <tr key={item.id} className="border-t border-zinc-100">
-                      <Td>{formatDate(item.depositDate)}</Td>
-                      <Td strong>{item.depositor ?? 'Não informado'}</Td>
-                      <Td strong>{formatMoney(item.amountCents)}</Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        </FormSection>
+        <RecordsSection
+          title="Confira os depósitos do período"
+          count={records.length}
+        >
+          {records.length ? (
+            <DepositRecords records={records} />
           ) : (
-            <EmptyTable text="Nenhum depósito registrado neste período." />
+            <EmptyRecords text="Os depósitos registrados neste período aparecerão aqui." />
           )}
-        </DataPanel>
+        </RecordsSection>
       </div>
     </>
   );
@@ -955,112 +1120,129 @@ function DepositView({ data, period, working, act, onOpen }: ViewProps) {
 
 function HistoryView({
   data,
+  currentInvoicePeriod,
   working,
   act,
-  openInvoicePeriod,
 }: {
   data: ControlData;
+  currentInvoicePeriod: Period | null;
   working: boolean;
-  act: ViewProps['act'];
-  openInvoicePeriod: Period | null;
+  act: ModuleProps['act'];
 }) {
   const [query, setQuery] = useState('');
-  const [module, setModule] = useState<'all' | ModuleName>('all');
+  const [filter, setFilter] = useState<'all' | ModuleName>('all');
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
-  const invoices = data.invoices.filter(
-    (item) =>
+  const notes = data.invoices.filter(
+    (invoice) =>
       !normalized ||
-      `${item.supplier} ${item.invoiceNumber} ${item.periodLabel} ${item.accessKey ?? ''}`
+      `${invoice.supplier} ${invoice.invoiceNumber} ${invoice.periodLabel} ${invoice.accessKey ?? ''}`
         .toLocaleLowerCase('pt-BR')
         .includes(normalized),
   );
   const periods = data.periods.filter(
     (period) =>
       period.status === 'closed' &&
-      (module === 'all' || period.module === module),
+      (filter === 'all' || period.module === filter),
   );
+
   return (
     <>
-      <PageTitle
+      <PageHeading
         eyebrow="Consulta"
-        title="Histórico e pesquisa"
-        description="Localize notas em qualquer período e reabra um relatório encerrado quando o financeiro solicitar uma correção."
+        title="Histórico"
+        description="Localize notas antigas ou reabra um período quando precisar corrigir uma informação."
       />
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+      <section className="rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <StepNumber number="1" />
+          <div className="flex-1">
+            <h2 className="font-heading text-lg font-bold">
+              Procure uma nota fiscal
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              Busque por fornecedor, número, chave de acesso ou nome do período.
+            </p>
+          </div>
+        </div>
+        <div className="relative mt-4">
+          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por fornecedor, número da nota, chave ou período…"
-            className="h-11 pl-10"
+            placeholder="Digite para pesquisar…"
+            className="pl-10"
           />
         </div>
-        <div className="mt-5">
-          <h2 className="mb-3 text-sm font-semibold">Notas encontradas</h2>
-          {invoices.length ? (
-            <div className="space-y-2">
-              {invoices.slice(0, 30).map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="flex flex-col gap-3 rounded-xl border border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
+        <div className="mt-4 space-y-2">
+          {notes.length ? (
+            notes.slice(0, 30).map((invoice) => (
+              <article
+                key={invoice.id}
+                className="rounded-xl border border-zinc-200 p-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold">{invoice.supplier}</p>
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-500">
+                      <h3 className="font-semibold">{invoice.supplier}</h3>
+                      <span className="rounded-md bg-zinc-100 px-2 py-1 text-[11px] font-semibold">
                         NF {invoice.invoiceNumber}
                       </span>
                       {invoice.resentFromId && (
-                        <span className="rounded-full bg-[#efe7e1] px-2 py-0.5 text-[11px] text-[#765541]">
+                        <span className="rounded-md bg-[#eee5df] px-2 py-1 text-[11px] font-semibold text-[#765541]">
                           Reenviada
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {invoice.periodLabel} · emissão{' '}
-                      {formatDate(invoice.issueDate)} · vencimento
-                      {invoice.dueDates.length > 1 ? 's' : ''}{' '}
-                      {invoice.dueDates.map(formatDate).join(', ')}
+                    <p className="mt-2 text-xs leading-5 text-zinc-500">
+                      {invoice.periodLabel} · Emissão{' '}
+                      {dateLabel(invoice.issueDate)} · Vencimento
+                      {invoice.dueDates.length > 1 ? 's' : ''}:{' '}
+                      {invoice.dueDates.map(dateLabel).join(', ')}
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     disabled={
                       working ||
-                      !openInvoicePeriod ||
-                      invoice.periodId === openInvoicePeriod?.id
+                      !currentInvoicePeriod ||
+                      invoice.periodId === currentInvoicePeriod.id
                     }
                     onClick={() =>
-                      act(
+                      void act(
                         { action: 'resend_invoice', invoiceId: invoice.id },
                         'Nota incluída no período atual para reenvio.',
                       )
                     }
+                    className="h-11 shrink-0"
                   >
                     <RotateCcw /> Reenviar
                   </Button>
                 </div>
-              ))}
-            </div>
+              </article>
+            ))
           ) : (
-            <EmptyTable text="Nenhuma nota encontrada." />
+            <EmptyRecords text="Nenhuma nota encontrada com essa busca." />
           )}
         </div>
-      </div>
-      <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="font-semibold">Períodos encerrados</h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Reabrir só é possível quando não existe outro período aberto do
-              mesmo relatório.
-            </p>
+      </section>
+      <section className="mt-5 rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <StepNumber number="2" />
+            <div>
+              <h2 className="font-heading text-lg font-bold">
+                Períodos encerrados
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">
+                Para reabrir, primeiro encerre qualquer período atual do mesmo
+                relatório.
+              </p>
+            </div>
           </div>
           <select
-            value={module}
-            onChange={(event) => setModule(event.target.value as typeof module)}
-            className="h-9 rounded-lg border border-zinc-200 bg-white px-3 text-sm"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as typeof filter)}
+            className="h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm"
           >
             <option value="all">Todos os relatórios</option>
             <option value="invoices">Notas fiscais</option>
@@ -1068,24 +1250,24 @@ function HistoryView({
             <option value="deposits">Depósitos</option>
           </select>
         </div>
-        <div className="space-y-2">
+        <div className="mt-4 space-y-2">
           {periods.length ? (
             periods.map((period) => {
               const Icon = moduleInfo[period.module].icon;
               return (
-                <div
+                <article
                   key={period.id}
-                  className="flex flex-col gap-3 rounded-xl border border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-xl border border-zinc-200 p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-lg bg-zinc-100">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100">
                       <Icon className="size-4" />
-                    </div>
+                    </span>
                     <div>
-                      <p className="text-sm font-semibold">{period.label}</p>
-                      <p className="text-xs text-zinc-500">
+                      <h3 className="text-sm font-semibold">{period.label}</h3>
+                      <p className="mt-1 text-xs text-zinc-500">
                         {moduleInfo[period.module].title} · encerrado em{' '}
-                        {formatDate(period.closedAt)}
+                        {dateLabel(period.closedAt)}
                       </p>
                     </div>
                   </div>
@@ -1093,57 +1275,326 @@ function HistoryView({
                     variant="outline"
                     disabled={working}
                     onClick={() =>
-                      act(
+                      void act(
                         { action: 'reopen_period', periodId: period.id },
                         'Período reaberto com todos os registros preservados.',
                       )
                     }
+                    className="h-11"
                   >
-                    <ArchiveRestore /> Reabrir
+                    <RotateCcw /> Reabrir
                   </Button>
-                </div>
+                </article>
               );
             })
           ) : (
-            <EmptyTable text="Nenhum período encerrado neste filtro." />
+            <EmptyRecords text="Nenhum período encerrado neste filtro." />
           )}
         </div>
+      </section>
+    </>
+  );
+}
+
+function FormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-black/8 bg-white p-4 sm:p-5">
+      <div className="mb-5 flex items-start gap-3">
+        <StepNumber number="2" />
+        <div>
+          <h2 className="font-heading text-lg font-bold">{title}</h2>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function RecordsSection({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-black/8 bg-white">
+      <div className="flex items-start justify-between gap-4 border-b border-zinc-100 p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <StepNumber number="3" />
+          <div>
+            <h2 className="font-heading text-lg font-bold">{title}</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Somente o período aberto aparece nesta lista.
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-500">
+          {count}
+        </span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function StepNumber({ number }: { number: string }) {
+  return (
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#765541] text-xs font-bold text-white">
+      {number}
+    </span>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        {label}
+        {hint && <small className="font-normal text-zinc-400">({hint})</small>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function SubmitButton({
+  children,
+  disabled,
+  working,
+}: {
+  children: ReactNode;
+  disabled: boolean;
+  working: boolean;
+}) {
+  return (
+    <Button
+      type="submit"
+      disabled={disabled}
+      className="h-12 w-full bg-black text-sm font-bold hover:bg-zinc-800"
+    >
+      {working ? <Loader2 className="animate-spin" /> : <Plus />}
+      {children}
+    </Button>
+  );
+}
+
+function DisabledHint() {
+  return (
+    <p className="flex items-center justify-center gap-2 text-center text-xs leading-5 text-zinc-400">
+      <CalendarDays className="size-4 shrink-0" /> Abra o período acima para
+      liberar o cadastro.
+    </p>
+  );
+}
+
+function EmptyRecords({ text }: { text: string }) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center px-6 py-10 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-300">
+        <Check className="size-5" />
+      </span>
+      <p className="mt-3 max-w-xs text-sm leading-6 text-zinc-400">{text}</p>
+    </div>
+  );
+}
+
+function InvoiceRecords({ records }: { records: Invoice[] }) {
+  return (
+    <>
+      <div className="divide-y divide-zinc-100 md:hidden">
+        {records.map((item) => (
+          <article key={item.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">{item.supplier}</h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  NF {item.invoiceNumber}
+                </p>
+              </div>
+              {item.resentFromId && (
+                <span className="rounded-md bg-[#eee5df] px-2 py-1 text-[10px] font-bold text-[#765541]">
+                  Reenvio
+                </span>
+              )}
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 text-xs">
+              <div>
+                <dt className="text-zinc-400">Emissão</dt>
+                <dd className="mt-1 font-semibold">
+                  {dateLabel(item.issueDate)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-zinc-400">Vencimento(s)</dt>
+                <dd className="mt-1 font-semibold leading-5">
+                  {item.dueDates.map(dateLabel).join(', ')}
+                </dd>
+              </div>
+            </dl>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <Th>Fornecedor</Th>
+              <Th>Emissão</Th>
+              <Th>Número</Th>
+              <Th>Vencimento(s)</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((item) => (
+              <tr key={item.id} className="border-t border-zinc-100">
+                <Td strong>
+                  {item.supplier}
+                  {item.resentFromId && (
+                    <span className="ml-2 rounded bg-[#eee5df] px-2 py-1 text-[10px] text-[#765541]">
+                      Reenvio
+                    </span>
+                  )}
+                </Td>
+                <Td>{dateLabel(item.issueDate)}</Td>
+                <Td>{item.invoiceNumber}</Td>
+                <Td>{item.dueDates.map(dateLabel).join(', ')}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </>
   );
 }
 
-function InvoiceTable({ invoices }: { invoices: Invoice[] }) {
+function ExpenseRecords({ records }: { records: Expense[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr>
-            <Th>Fornecedor</Th>
-            <Th>Emissão</Th>
-            <Th>Número</Th>
-            <Th>Vencimento(s)</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {invoices.map((item) => (
-            <tr key={item.id} className="border-t border-zinc-100">
-              <Td strong>
-                {item.supplier}
-                {item.resentFromId && (
-                  <span className="ml-2 rounded-full bg-[#efe7e1] px-2 py-0.5 text-[10px] text-[#765541]">
-                    Reenvio
-                  </span>
-                )}
-              </Td>
-              <Td>{formatDate(item.issueDate)}</Td>
-              <Td>{item.invoiceNumber}</Td>
-              <Td>{item.dueDates.map(formatDate).join(', ')}</Td>
+    <>
+      <div className="divide-y divide-zinc-100 md:hidden">
+        {records.map((item) => (
+          <article key={item.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">{item.name}</h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {dateLabel(item.expenseDate)}
+                </p>
+              </div>
+              <p className="font-bold">{currency(item.amountCents)}</p>
+            </div>
+            <p className="mt-3 text-xs text-zinc-500">
+              Baixa:{' '}
+              <span className="font-semibold text-zinc-700">
+                {dateLabel(item.settledDate)}
+              </span>
+            </p>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <Th>Despesa</Th>
+              <Th>Data</Th>
+              <Th>Valor</Th>
+              <Th>Baixa</Th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {records.map((item) => (
+              <tr key={item.id} className="border-t border-zinc-100">
+                <Td strong>{item.name}</Td>
+                <Td>{dateLabel(item.expenseDate)}</Td>
+                <Td strong>{currency(item.amountCents)}</Td>
+                <Td>{dateLabel(item.settledDate)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function DepositRecords({ records }: { records: Deposit[] }) {
+  return (
+    <>
+      <div className="divide-y divide-zinc-100 md:hidden">
+        {records.map((item) => (
+          <article key={item.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">
+                  {item.depositor ?? 'Depositante não informado'}
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {dateLabel(item.depositDate)}
+                </p>
+              </div>
+              <p className="font-bold">{currency(item.amountCents)}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <Th>Data</Th>
+              <Th>Depositante</Th>
+              <Th>Valor</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((item) => (
+              <tr key={item.id} className="border-t border-zinc-100">
+                <Td>{dateLabel(item.depositDate)}</Td>
+                <Td strong>{item.depositor ?? 'Não informado'}</Td>
+                <Td strong>{currency(item.amountCents)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function Th({ children }: { children: ReactNode }) {
+  return (
+    <th className="whitespace-nowrap px-5 py-3 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">
+      {children}
+    </th>
+  );
+}
+function Td({ children, strong }: { children: ReactNode; strong?: boolean }) {
+  return (
+    <td
+      className={`whitespace-nowrap px-5 py-4 text-zinc-600 ${strong ? 'font-semibold text-zinc-900' : ''}`}
+    >
+      {children}
+    </td>
   );
 }
 
@@ -1156,7 +1607,7 @@ function OpenPeriodModal({
   module: ModuleName;
   working: boolean;
   onClose: () => void;
-  act: ViewProps['act'];
+  act: ModuleProps['act'];
 }) {
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
@@ -1166,44 +1617,49 @@ function OpenPeriodModal({
       `Período de ${moduleInfo[module].title.toLocaleLowerCase('pt-BR')} aberto.`,
     );
   }
-  const suggestion = `${moduleInfo[module].title} · ${new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date())}`;
+  const suggestion = `${moduleInfo[module].shortTitle} · ${new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date())}`;
   return (
     <dialog
       open
-      className="fixed inset-0 z-50 flex h-full w-full max-w-none items-center justify-center bg-black/45 p-4"
       aria-modal="true"
+      className="fixed inset-0 z-50 flex h-full w-full max-w-none items-end justify-center bg-black/55 p-0 sm:items-center sm:p-4"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
+        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-zinc-200 sm:hidden" />
         <div className="flex items-start justify-between">
-          <div className="flex size-11 items-center justify-center rounded-xl bg-[#efe7e1] text-[#765541]">
-            <CalendarRange className="size-5" />
-          </div>
+          <span className="flex size-11 items-center justify-center rounded-xl bg-[#eee5df] text-[#765541]">
+            <CalendarDays className="size-5" />
+          </span>
           <button onClick={onClose} aria-label="Fechar">
             <X className="size-5 text-zinc-400" />
           </button>
         </div>
-        <h2 className="mt-5 text-xl font-semibold">
+        <h2 className="font-heading mt-5 text-xl font-bold">
           Abrir período de {moduleInfo[module].title.toLocaleLowerCase('pt-BR')}
         </h2>
         <p className="mt-2 text-sm leading-6 text-zinc-500">
-          O período é independente dos outros relatórios e continuará aberto até
+          Ele será independente dos outros relatórios e permanecerá aberto até
           você encerrá-lo.
         </p>
-        <form onSubmit={submit} className="mt-5 space-y-4">
-          <Field label="Nome do período">
+        <form onSubmit={submit} className="mt-5 space-y-5">
+          <Field label="Como deseja identificar este período?">
             <Input name="label" defaultValue={suggestion} required autoFocus />
           </Field>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="h-12"
+            >
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={working}
-              className="bg-black hover:bg-zinc-800"
+              className="h-12 bg-black hover:bg-zinc-800"
             >
               {working ? <Loader2 className="animate-spin" /> : <Plus />} Abrir
-              período
             </Button>
           </div>
         </form>
@@ -1220,15 +1676,14 @@ function BarcodeScanner({
   onRead: (value: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [scannerMessage, setScannerMessage] = useState(
+  const [message, setMessage] = useState(
     'Aponte a câmera para o código de barras da DANFE.',
   );
 
   useEffect(() => {
     let stream: MediaStream | null = null;
-    let animationFrame = 0;
+    let frame = 0;
     let stopped = false;
-
     async function start() {
       const Detector = (
         window as unknown as {
@@ -1240,8 +1695,8 @@ function BarcodeScanner({
         }
       ).BarcodeDetector;
       if (!Detector) {
-        setScannerMessage(
-          'Este navegador não oferece leitura direta. Digite a chave de 44 dígitos no campo.',
+        setMessage(
+          'Este navegador não oferece leitura pela câmera. Digite a chave manualmente.',
         );
         return;
       }
@@ -1260,20 +1715,19 @@ function BarcodeScanner({
         const scan = async () => {
           if (stopped) return;
           try {
-            const codes = await detector.detect(video);
-            const value = codes[0]?.rawValue;
+            const value = (await detector.detect(video))[0]?.rawValue;
             if (value) {
               onRead(value);
               return;
             }
           } catch {
-            /* continua tentando enquanto a câmera estiver aberta */
+            /* mantém a leitura ativa */
           }
-          animationFrame = requestAnimationFrame(scan);
+          frame = requestAnimationFrame(scan);
         };
-        animationFrame = requestAnimationFrame(scan);
+        frame = requestAnimationFrame(scan);
       } catch {
-        setScannerMessage(
+        setMessage(
           'Não foi possível acessar a câmera. Verifique a permissão ou digite a chave manualmente.',
         );
       }
@@ -1281,7 +1735,7 @@ function BarcodeScanner({
     void start();
     return () => {
       stopped = true;
-      cancelAnimationFrame(animationFrame);
+      cancelAnimationFrame(frame);
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, [onRead]);
@@ -1289,16 +1743,15 @@ function BarcodeScanner({
   return (
     <dialog
       open
-      className="fixed inset-0 z-[60] flex h-full w-full max-w-none items-center justify-center bg-black/75 p-4"
       aria-modal="true"
+      className="fixed inset-0 z-[60] flex h-full w-full max-w-none items-center justify-center bg-black/80 p-4"
     >
       <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white">
         <div className="flex items-center justify-between p-4">
           <div>
-            <h2 className="font-semibold">Ler código da nota</h2>
+            <h2 className="font-heading font-bold">Ler código da nota</h2>
             <p className="mt-1 text-xs text-zinc-500">
-              A leitura preenche a chave; fornecedor e datas continuam para
-              conferência.
+              A chave será preenchida automaticamente.
             </p>
           </div>
           <button onClick={onClose} aria-label="Fechar">
@@ -1316,113 +1769,10 @@ function BarcodeScanner({
             <ScanLine className="absolute left-1/2 top-1/2 size-10 -translate-x-1/2 -translate-y-1/2 text-white" />
           </div>
         </div>
-        <div className="p-4 text-center text-sm text-zinc-600">
-          {scannerMessage}
-        </div>
+        <p className="p-4 text-center text-sm leading-6 text-zinc-600">
+          {message}
+        </p>
       </div>
     </dialog>
-  );
-}
-
-type ViewProps = {
-  data: ControlData;
-  period: Period | null;
-  working: boolean;
-  act: (payload: Record<string, unknown>, message?: string) => Promise<boolean>;
-  onOpen: () => void;
-};
-function FormCard({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mb-5 mt-1 text-xs text-zinc-500">{subtitle}</p>
-      {children}
-    </section>
-  );
-}
-function DataPanel({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="min-w-0 rounded-2xl border border-zinc-200 bg-white">
-      <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
-        <h2 className="font-semibold">{title}</h2>
-        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">
-          {count}
-        </span>
-      </div>
-      {children}
-    </section>
-  );
-}
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 flex items-center gap-2 text-sm font-medium">
-        {label}
-        {hint && <small className="font-normal text-zinc-400">({hint})</small>}
-      </span>
-      {children}
-    </label>
-  );
-}
-function FormDisabled() {
-  return (
-    <p className="flex items-center justify-center gap-2 text-xs text-zinc-400">
-      <CalendarRange className="size-3.5" /> Abra um período para liberar o
-      formulário.
-    </p>
-  );
-}
-function EmptyTable({ text }: { text: string }) {
-  return (
-    <div className="flex min-h-36 flex-col items-center justify-center px-5 text-center">
-      <CheckCircle2 className="mb-2 size-6 text-zinc-300" />
-      <p className="text-sm text-zinc-400">{text}</p>
-    </div>
-  );
-}
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="whitespace-nowrap px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-400">
-      {children}
-    </th>
-  );
-}
-function Td({
-  children,
-  strong,
-}: {
-  children: React.ReactNode;
-  strong?: boolean;
-}) {
-  return (
-    <td
-      className={`whitespace-nowrap px-5 py-4 text-zinc-600 ${strong ? 'font-semibold text-zinc-900' : ''}`}
-    >
-      {children}
-    </td>
   );
 }
