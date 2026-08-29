@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
-import { Inter, Montserrat } from 'next/font/google';
+import { Nunito_Sans } from 'next/font/google';
 
 import './globals.css';
 
-const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
-const montserrat = Montserrat({
-  variable: '--font-montserrat',
+const nunitoSans = Nunito_Sans({
+  variable: '--font-nunito-sans',
   subsets: ['latin'],
 });
 
@@ -21,9 +20,8 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.variable} ${montserrat.variable} antialiased`}>
-        {children}
-      </body>
+      <body className={`${nunitoSans.variable} antialiased`}>{children}</body>
     </html>
   );
 }
+

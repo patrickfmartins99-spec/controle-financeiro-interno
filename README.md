@@ -9,6 +9,8 @@ Sistema web responsivo para substituir os controles internos de notas fiscais, d
 - Notas fiscais com um ou mais vencimentos.
 - Leitura da chave da nota pela câmera em navegadores compatíveis.
 - Histórico pesquisável e reabertura de períodos.
+- Capas A4 geradas ao encerrar cada período, com reimpressão pelo histórico.
+- Totais e relação completa dos lançamentos nas capas de despesas e depósitos.
 - Reenvio de notas antigas sem apagar o registro original.
 - Interface mobile-first com navegação adaptada para telefone, tablet e computador.
 - Dados persistentes com Netlify Blobs.
@@ -45,3 +47,4 @@ O armazenamento Netlify Blobs é criado automaticamente no primeiro uso; não ex
 npm run lint
 npm run build
 ```
+

@@ -26,6 +26,7 @@ import {
   Loader2,
   LockKeyhole,
   Plus,
+  Printer,
   ReceiptText,
   RotateCcw,
   ScanLine,
@@ -151,6 +152,7 @@ export function ControlApp() {
     null,
   );
   const [periodModal, setPeriodModal] = useState<ModuleName | null>(null);
+  const [coverPeriodId, setCoverPeriodId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -228,76 +230,99 @@ export function ControlApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  async function closePeriod(period: Period) {
+    const success = await act(
+      { action: 'close_period', periodId: period.id },
+      'Período encerrado. A capa está pronta para impressão.',
+    );
+    if (success) setCoverPeriodId(period.id);
+  }
+
   return (
-    <div className="min-h-dvh bg-[#f5f4f2] text-[#171717]">
-      <DesktopSidebar view={view} onNavigate={navigate} />
-      <MobileHeader />
+    <>
+      <div className="app-shell min-h-dvh bg-[#f5f4f2] text-[#171717]">
+        <DesktopSidebar view={view} onNavigate={navigate} />
+        <MobileHeader />
 
-      <main className="pb-28 lg:ml-[252px] lg:pb-10">
-        <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
-          {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}
-          {loading ? (
-            <Loading />
-          ) : (
-            <>
-              {view === 'overview' && (
-                <Overview
-                  data={data}
-                  periods={openPeriods}
-                  onNavigate={navigate}
-                  onOpen={setPeriodModal}
-                />
-              )}
-              {view === 'invoices' && (
-                <InvoiceView
-                  data={data}
-                  period={openPeriods.invoices}
-                  working={working}
-                  act={act}
-                  onOpen={() => setPeriodModal('invoices')}
-                />
-              )}
-              {view === 'expenses' && (
-                <ExpenseView
-                  data={data}
-                  period={openPeriods.expenses}
-                  working={working}
-                  act={act}
-                  onOpen={() => setPeriodModal('expenses')}
-                />
-              )}
-              {view === 'deposits' && (
-                <DepositView
-                  data={data}
-                  period={openPeriods.deposits}
-                  working={working}
-                  act={act}
-                  onOpen={() => setPeriodModal('deposits')}
-                />
-              )}
-              {view === 'history' && (
-                <HistoryView
-                  data={data}
-                  currentInvoicePeriod={openPeriods.invoices}
-                  working={working}
-                  act={act}
-                />
-              )}
-            </>
-          )}
-        </div>
-      </main>
+        <main className="pb-28 lg:ml-[252px] lg:pb-10">
+          <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
+            {notice && (
+              <Notice notice={notice} onClose={() => setNotice(null)} />
+            )}
+            {loading ? (
+              <Loading />
+            ) : (
+              <>
+                {view === 'overview' && (
+                  <Overview
+                    data={data}
+                    periods={openPeriods}
+                    onNavigate={navigate}
+                    onOpen={setPeriodModal}
+                  />
+                )}
+                {view === 'invoices' && (
+                  <InvoiceView
+                    data={data}
+                    period={openPeriods.invoices}
+                    working={working}
+                    act={act}
+                    onOpen={() => setPeriodModal('invoices')}
+                    onClosePeriod={closePeriod}
+                  />
+                )}
+                {view === 'expenses' && (
+                  <ExpenseView
+                    data={data}
+                    period={openPeriods.expenses}
+                    working={working}
+                    act={act}
+                    onOpen={() => setPeriodModal('expenses')}
+                    onClosePeriod={closePeriod}
+                  />
+                )}
+                {view === 'deposits' && (
+                  <DepositView
+                    data={data}
+                    period={openPeriods.deposits}
+                    working={working}
+                    act={act}
+                    onOpen={() => setPeriodModal('deposits')}
+                    onClosePeriod={closePeriod}
+                  />
+                )}
+                {view === 'history' && (
+                  <HistoryView
+                    data={data}
+                    currentInvoicePeriod={openPeriods.invoices}
+                    working={working}
+                    act={act}
+                    onPrint={setCoverPeriodId}
+                  />
+                )}
+              </>
+            )}
+          </div>
+        </main>
 
-      <MobileNavigation view={view} onNavigate={navigate} />
-      {periodModal && (
-        <OpenPeriodModal
-          module={periodModal}
-          working={working}
-          onClose={() => setPeriodModal(null)}
-          act={act}
+        <MobileNavigation view={view} onNavigate={navigate} />
+        {periodModal && (
+          <OpenPeriodModal
+            module={periodModal}
+            working={working}
+            onClose={() => setPeriodModal(null)}
+            act={act}
+          />
+        )}
+      </div>
+      {coverPeriodId && (
+        <PrintCover
+          data={data}
+          periodId={coverPeriodId}
+          onClose={() => setCoverPeriodId(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -309,7 +334,7 @@ function DesktopSidebar({
   onNavigate: (view: ViewName) => void;
 }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-[#0b0b0b] text-white lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-black text-white lg:flex">
       <div className="px-7 pb-6 pt-7">
         <Image
           src="/logo-top-haus.jpg"
@@ -335,7 +360,7 @@ function DesktopSidebar({
             <button
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-sm font-medium transition-colors ${active ? 'bg-[#84614c] text-white' : 'text-white/65 hover:bg-white/8 hover:text-white'}`}
+              className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 text-left text-sm font-semibold transition-colors ${active ? 'bg-white text-black' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
             >
               <Icon className="size-[18px]" />
               {item.label}
@@ -662,6 +687,7 @@ type ModuleProps = {
   working: boolean;
   act: (payload: Record<string, unknown>, success: string) => Promise<boolean>;
   onOpen: () => void;
+  onClosePeriod: (period: Period) => Promise<void>;
 };
 
 function PeriodStep({
@@ -670,7 +696,7 @@ function PeriodStep({
   count,
   total,
   working,
-  act,
+  onClosePeriod,
   onOpen,
 }: {
   module: ModuleName;
@@ -678,7 +704,7 @@ function PeriodStep({
   count: number;
   total?: number;
   working: boolean;
-  act: ModuleProps['act'];
+  onClosePeriod: ModuleProps['onClosePeriod'];
   onOpen: () => void;
 }) {
   return (
@@ -713,12 +739,7 @@ function PeriodStep({
             <Button
               disabled={working}
               variant="outline"
-              onClick={() =>
-                void act(
-                  { action: 'close_period', periodId: period.id },
-                  'Período encerrado e guardado no histórico.',
-                )
-              }
+              onClick={() => void onClosePeriod(period)}
               className="h-11 px-4"
             >
               <Archive /> Encerrar
@@ -738,7 +759,14 @@ function PeriodStep({
   );
 }
 
-function InvoiceView({ data, period, working, act, onOpen }: ModuleProps) {
+function InvoiceView({
+  data,
+  period,
+  working,
+  act,
+  onOpen,
+  onClosePeriod,
+}: ModuleProps) {
   const records = period
     ? data.invoices.filter((item) => item.periodId === period.id)
     : [];
@@ -780,7 +808,7 @@ function InvoiceView({ data, period, working, act, onOpen }: ModuleProps) {
         period={period}
         count={records.length}
         working={working}
-        act={act}
+        onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -921,7 +949,14 @@ function InvoiceView({ data, period, working, act, onOpen }: ModuleProps) {
   );
 }
 
-function ExpenseView({ data, period, working, act, onOpen }: ModuleProps) {
+function ExpenseView({
+  data,
+  period,
+  working,
+  act,
+  onOpen,
+  onClosePeriod,
+}: ModuleProps) {
   const records = period
     ? data.expenses.filter((item) => item.periodId === period.id)
     : [];
@@ -957,7 +992,7 @@ function ExpenseView({ data, period, working, act, onOpen }: ModuleProps) {
         count={records.length}
         total={total}
         working={working}
-        act={act}
+        onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -1024,7 +1059,14 @@ function ExpenseView({ data, period, working, act, onOpen }: ModuleProps) {
   );
 }
 
-function DepositView({ data, period, working, act, onOpen }: ModuleProps) {
+function DepositView({
+  data,
+  period,
+  working,
+  act,
+  onOpen,
+  onClosePeriod,
+}: ModuleProps) {
   const records = period
     ? data.deposits.filter((item) => item.periodId === period.id)
     : [];
@@ -1059,7 +1101,7 @@ function DepositView({ data, period, working, act, onOpen }: ModuleProps) {
         count={records.length}
         total={total}
         working={working}
-        act={act}
+        onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
       <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -1123,11 +1165,13 @@ function HistoryView({
   currentInvoicePeriod,
   working,
   act,
+  onPrint,
 }: {
   data: ControlData;
   currentInvoicePeriod: Period | null;
   working: boolean;
   act: ModuleProps['act'];
+  onPrint: (periodId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ModuleName>('all');
@@ -1271,19 +1315,27 @@ function HistoryView({
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    disabled={working}
-                    onClick={() =>
-                      void act(
-                        { action: 'reopen_period', periodId: period.id },
-                        'Período reaberto com todos os registros preservados.',
-                      )
-                    }
-                    className="h-11"
-                  >
-                    <RotateCcw /> Reabrir
-                  </Button>
+                  <div className="grid grid-cols-2 gap-2 sm:flex">
+                    <Button
+                      onClick={() => onPrint(period.id)}
+                      className="h-11 bg-black hover:bg-zinc-800"
+                    >
+                      <Printer /> Imprimir capa
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={working}
+                      onClick={() =>
+                        void act(
+                          { action: 'reopen_period', periodId: period.id },
+                          'Período reaberto com todos os registros preservados.',
+                        )
+                      }
+                      className="h-11"
+                    >
+                      <RotateCcw /> Reabrir
+                    </Button>
+                  </div>
                 </article>
               );
             })
@@ -1293,6 +1345,303 @@ function HistoryView({
         </div>
       </section>
     </>
+  );
+}
+
+function PrintCover({
+  data,
+  periodId,
+  onClose,
+}: {
+  data: ControlData;
+  periodId: string;
+  onClose: () => void;
+}) {
+  const period = data.periods.find((item) => item.id === periodId);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [onClose]);
+
+  if (!period) return null;
+
+  const invoices = data.invoices.filter((item) => item.periodId === period.id);
+  const expenses = data.expenses.filter((item) => item.periodId === period.id);
+  const deposits = data.deposits.filter((item) => item.periodId === period.id);
+  const records =
+    period.module === 'invoices'
+      ? invoices
+      : period.module === 'expenses'
+        ? expenses
+        : deposits;
+  const total =
+    period.module === 'expenses'
+      ? expenses.reduce((sum, item) => sum + item.amountCents, 0)
+      : period.module === 'deposits'
+        ? deposits.reduce((sum, item) => sum + item.amountCents, 0)
+        : null;
+
+  return (
+    <dialog
+      open
+      className="print-cover-shell fixed inset-0 z-[100] h-full w-full max-w-none overflow-y-auto border-0 bg-zinc-200 px-3 py-4 sm:px-6 sm:py-6"
+      aria-modal="true"
+      aria-label="Capa do período encerrado"
+    >
+      <div className="print-actions sticky top-0 z-10 mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-lg sm:p-4">
+        <div>
+          <p className="text-sm font-bold">Capa pronta</p>
+          <p className="text-xs text-zinc-500">
+            Confira as informações antes de imprimir.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            aria-label="Fechar capa"
+            className="h-11"
+          >
+            <X /> <span className="hidden sm:inline">Fechar</span>
+          </Button>
+          <Button
+            onClick={() => window.print()}
+            className="h-11 bg-black hover:bg-zinc-800"
+          >
+            <Printer /> Imprimir
+          </Button>
+        </div>
+      </div>
+
+      <article className="print-document mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10">
+        <header className="flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-5 text-white">
+          <Image
+            src="/logo-top-haus.jpg"
+            alt="Top Haus"
+            width={142}
+            height={88}
+            className="h-14 w-auto"
+          />
+          <div className="text-right">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/60">
+              Controle interno
+            </p>
+            <h1 className="mt-1 text-xl font-extrabold">
+              Capa de encerramento
+            </h1>
+          </div>
+        </header>
+
+        <section className="border-x border-b border-black/15 px-6 py-6">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#765541]">
+            {moduleInfo[period.module].title}
+          </p>
+          <h2 className="mt-1 text-2xl font-extrabold">{period.label}</h2>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <PrintMeta label="Abertura" value={dateLabel(period.openedAt)} />
+            <PrintMeta label="Fechamento" value={dateLabel(period.closedAt)} />
+            <PrintMeta
+              label="Lançamentos"
+              value={`${records.length} ${records.length === 1 ? 'item' : 'itens'}`}
+            />
+            <PrintMeta label="Situação" value="Encerrado" />
+          </div>
+
+          {total !== null && (
+            <div className="mt-5 flex flex-col items-start justify-between gap-4 rounded-xl bg-[#eee5df] px-5 py-4 sm:flex-row sm:items-end sm:gap-6">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#765541]">
+                  {period.module === 'expenses'
+                    ? 'Total de despesas'
+                    : 'Total depositado'}
+                </p>
+                <p className="mt-1 text-xs text-[#765541]">
+                  Somente os lançamentos deste período
+                </p>
+              </div>
+              <p className="text-2xl font-extrabold">{currency(total)}</p>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-8">
+          <div className="mb-3 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-zinc-400">
+                Relação completa
+              </p>
+              <h3 className="mt-1 text-lg font-extrabold">
+                Lançamentos do período
+              </h3>
+            </div>
+            <p className="text-xs font-bold text-zinc-500">
+              {records.length} {records.length === 1 ? 'registro' : 'registros'}
+            </p>
+          </div>
+
+          {records.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-10 text-center text-sm text-zinc-500">
+              Este período foi encerrado sem lançamentos.
+            </div>
+          ) : period.module === 'invoices' ? (
+            <PrintInvoiceTable records={invoices} />
+          ) : period.module === 'expenses' ? (
+            <PrintExpenseTable records={expenses} />
+          ) : (
+            <PrintDepositTable records={deposits} />
+          )}
+        </section>
+
+        <footer className="mt-10 flex items-center justify-between gap-4 border-t border-zinc-300 pt-4 text-[10px] text-zinc-400">
+          <p>Top Haus · Documento de controle interno</p>
+          <p>
+            Gerado em{' '}
+            {new Intl.DateTimeFormat('pt-BR', {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            }).format(new Date())}
+          </p>
+        </footer>
+      </article>
+    </dialog>
+  );
+}
+
+function PrintMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-zinc-200 px-3 py-3">
+      <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-zinc-400">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-bold">{value}</p>
+    </div>
+  );
+}
+
+function PrintInvoiceTable({ records }: { records: Invoice[] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-300">
+      <table className="w-full table-fixed text-left text-[10px]">
+        <thead className="bg-black text-white">
+          <tr>
+            <PrintTh className="w-[24%]">Fornecedor</PrintTh>
+            <PrintTh className="w-[12%]">Emissão</PrintTh>
+            <PrintTh className="w-[13%]">Nota</PrintTh>
+            <PrintTh className="w-[22%]">Vencimento(s)</PrintTh>
+            <PrintTh className="w-[29%]">Chave de acesso</PrintTh>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((item) => (
+            <tr key={item.id} className="border-t border-zinc-200 align-top">
+              <PrintTd strong>{item.supplier}</PrintTd>
+              <PrintTd>{dateLabel(item.issueDate)}</PrintTd>
+              <PrintTd>{item.invoiceNumber}</PrintTd>
+              <PrintTd>{item.dueDates.map(dateLabel).join(', ')}</PrintTd>
+              <PrintTd className="break-all">
+                {item.accessKey || 'Não informada'}
+              </PrintTd>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrintExpenseTable({ records }: { records: Expense[] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-300">
+      <table className="w-full table-fixed text-left text-[10px]">
+        <thead className="bg-black text-white">
+          <tr>
+            <PrintTh className="w-[38%]">Despesa</PrintTh>
+            <PrintTh className="w-[20%]">Data</PrintTh>
+            <PrintTh className="w-[22%]">Valor</PrintTh>
+            <PrintTh className="w-[20%]">Baixa</PrintTh>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((item) => (
+            <tr key={item.id} className="border-t border-zinc-200 align-top">
+              <PrintTd strong>{item.name}</PrintTd>
+              <PrintTd>{dateLabel(item.expenseDate)}</PrintTd>
+              <PrintTd strong>{currency(item.amountCents)}</PrintTd>
+              <PrintTd>{dateLabel(item.settledDate)}</PrintTd>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrintDepositTable({ records }: { records: Deposit[] }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-zinc-300">
+      <table className="w-full table-fixed text-left text-[10px]">
+        <thead className="bg-black text-white">
+          <tr>
+            <PrintTh className="w-[28%]">Data</PrintTh>
+            <PrintTh className="w-[44%]">Depositante</PrintTh>
+            <PrintTh className="w-[28%]">Valor</PrintTh>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((item) => (
+            <tr key={item.id} className="border-t border-zinc-200 align-top">
+              <PrintTd>{dateLabel(item.depositDate)}</PrintTd>
+              <PrintTd strong>{item.depositor ?? 'Não informado'}</PrintTd>
+              <PrintTd strong>{currency(item.amountCents)}</PrintTd>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrintTh({
+  children,
+  className = '',
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <th
+      className={`px-3 py-3 font-extrabold uppercase tracking-[0.08em] ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function PrintTd({
+  children,
+  strong,
+  className = '',
+}: {
+  children: ReactNode;
+  strong?: boolean;
+  className?: string;
+}) {
+  return (
+    <td
+      className={`whitespace-normal px-3 py-3 leading-4 text-zinc-600 ${strong ? 'font-bold text-black' : ''} ${className}`}
+    >
+      {children}
+    </td>
   );
 }
 
@@ -1776,3 +2125,4 @@ function BarcodeScanner({
     </dialog>
   );
 }
+

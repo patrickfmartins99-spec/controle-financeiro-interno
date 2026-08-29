@@ -7,8 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-heading: var(--font-montserrat);
+  --font-sans: var(--font-nunito-sans);
+  --font-heading: var(--font-nunito-sans);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -59,10 +59,11 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply font-sans;
+    font-family: ui-rounded, sans-serif;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-nunito-sans), ui-rounded, sans-serif;
     min-width: 320px;
   }
   button,
@@ -80,17 +81,47 @@
 }
 
 @media print {
-  aside,
-  header,
-  nav,
-  button,
-  form {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  .app-shell,
+  .print-actions {
     display: none !important;
   }
-  main {
-    margin-left: 0 !important;
+
+  .print-cover-shell {
+    position: static !important;
+    display: block !important;
+    overflow: visible !important;
+    background: white !important;
+    padding: 0 !important;
   }
+
+  .print-document {
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .print-document,
+  .print-document * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-document thead {
+    display: table-header-group;
+  }
+
+  .print-document tr {
+    break-inside: avoid;
+  }
+
   body {
     background: white;
   }
 }
+
