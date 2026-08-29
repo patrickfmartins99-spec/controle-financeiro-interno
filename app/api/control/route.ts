@@ -45,6 +45,19 @@ function openPeriodFor(data: ControlData, module: ModuleName) {
   );
 }
 
+function recordCanChange(
+  data: ControlData,
+  module: ModuleName,
+  periodId: string,
+) {
+  return data.periods.some(
+    (period) =>
+      period.id === periodId &&
+      period.module === module &&
+      period.status === 'open',
+  );
+}
+
 function amountInCents(value: unknown) {
   const amount = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(amount) && amount > 0
@@ -175,6 +188,54 @@ async function handleAction(body: Record<string, unknown>) {
       return NextResponse.json(await saveData(data));
     }
 
+    case 'update_invoice': {
+      if (typeof body.invoiceId !== 'string') return error('Nota inválida.');
+      const invoice = data.invoices.find((item) => item.id === body.invoiceId);
+      if (!invoice) return error('Nota não encontrada.', 404);
+      if (!recordCanChange(data, 'invoices', invoice.periodId)) {
+        return error('Reabra o período antes de editar esta nota.', 409);
+      }
+      if (
+        typeof body.supplier !== 'string' ||
+        !body.supplier.trim() ||
+        typeof body.issueDate !== 'string' ||
+        !body.issueDate ||
+        typeof body.invoiceNumber !== 'string' ||
+        !body.invoiceNumber.trim() ||
+        !Array.isArray(body.dueDates)
+      ) {
+        return error(
+          'Preencha fornecedor, emissão, número e ao menos um vencimento.',
+        );
+      }
+      const dueDates = body.dueDates.filter(
+        (date): date is string => typeof date === 'string' && Boolean(date),
+      );
+      if (!dueDates.length) return error('Informe ao menos um vencimento.');
+      invoice.supplier = body.supplier.trim();
+      invoice.issueDate = body.issueDate;
+      invoice.invoiceNumber = body.invoiceNumber.trim();
+      invoice.accessKey =
+        typeof body.accessKey === 'string'
+          ? body.accessKey.replace(/\D/g, '').slice(0, 44) || null
+          : null;
+      invoice.dueDates = dueDates;
+      return NextResponse.json(await saveData(data));
+    }
+
+    case 'delete_invoice': {
+      if (typeof body.invoiceId !== 'string') return error('Nota inválida.');
+      const index = data.invoices.findIndex(
+        (item) => item.id === body.invoiceId,
+      );
+      if (index < 0) return error('Nota não encontrada.', 404);
+      if (!recordCanChange(data, 'invoices', data.invoices[index].periodId)) {
+        return error('Reabra o período antes de excluir esta nota.', 409);
+      }
+      data.invoices.splice(index, 1);
+      return NextResponse.json(await saveData(data));
+    }
+
     case 'resend_invoice': {
       if (typeof body.invoiceId !== 'string') return error('Nota inválida.');
       const period = openPeriodFor(data, 'invoices');
@@ -226,6 +287,50 @@ async function handleAction(body: Record<string, unknown>) {
       return NextResponse.json(await saveData(data));
     }
 
+    case 'update_expense': {
+      if (typeof body.expenseId !== 'string') {
+        return error('Despesa inválida.');
+      }
+      const expense = data.expenses.find((item) => item.id === body.expenseId);
+      if (!expense) return error('Despesa não encontrada.', 404);
+      if (!recordCanChange(data, 'expenses', expense.periodId)) {
+        return error('Reabra o período antes de editar esta despesa.', 409);
+      }
+      const amountCents = amountInCents(body.amount);
+      if (
+        typeof body.name !== 'string' ||
+        !body.name.trim() ||
+        typeof body.expenseDate !== 'string' ||
+        !body.expenseDate ||
+        !amountCents
+      ) {
+        return error('Preencha a despesa, a data e um valor válido.');
+      }
+      expense.name = body.name.trim();
+      expense.expenseDate = body.expenseDate;
+      expense.amountCents = amountCents;
+      expense.settledDate =
+        typeof body.settledDate === 'string' && body.settledDate
+          ? body.settledDate
+          : null;
+      return NextResponse.json(await saveData(data));
+    }
+
+    case 'delete_expense': {
+      if (typeof body.expenseId !== 'string') {
+        return error('Despesa inválida.');
+      }
+      const index = data.expenses.findIndex(
+        (item) => item.id === body.expenseId,
+      );
+      if (index < 0) return error('Despesa não encontrada.', 404);
+      if (!recordCanChange(data, 'expenses', data.expenses[index].periodId)) {
+        return error('Reabra o período antes de excluir esta despesa.', 409);
+      }
+      data.expenses.splice(index, 1);
+      return NextResponse.json(await saveData(data));
+    }
+
     case 'add_deposit': {
       const period = openPeriodFor(data, 'deposits');
       if (!period) return error('Abra um período de depósitos primeiro.', 409);
@@ -250,6 +355,47 @@ async function handleAction(body: Record<string, unknown>) {
             : null,
         createdAt: timestamp(),
       });
+      return NextResponse.json(await saveData(data));
+    }
+
+    case 'update_deposit': {
+      if (typeof body.depositId !== 'string') {
+        return error('Depósito inválido.');
+      }
+      const deposit = data.deposits.find((item) => item.id === body.depositId);
+      if (!deposit) return error('Depósito não encontrado.', 404);
+      if (!recordCanChange(data, 'deposits', deposit.periodId)) {
+        return error('Reabra o período antes de editar este depósito.', 409);
+      }
+      const amountCents = amountInCents(body.amount);
+      if (
+        typeof body.depositDate !== 'string' ||
+        !body.depositDate ||
+        !amountCents
+      ) {
+        return error('Preencha a data e um valor válido.');
+      }
+      deposit.depositDate = body.depositDate;
+      deposit.amountCents = amountCents;
+      deposit.depositor =
+        typeof body.depositor === 'string' && body.depositor.trim()
+          ? body.depositor.trim()
+          : null;
+      return NextResponse.json(await saveData(data));
+    }
+
+    case 'delete_deposit': {
+      if (typeof body.depositId !== 'string') {
+        return error('Depósito inválido.');
+      }
+      const index = data.deposits.findIndex(
+        (item) => item.id === body.depositId,
+      );
+      if (index < 0) return error('Depósito não encontrado.', 404);
+      if (!recordCanChange(data, 'deposits', data.deposits[index].periodId)) {
+        return error('Reabra o período antes de excluir este depósito.', 409);
+      }
+      data.deposits.splice(index, 1);
       return NextResponse.json(await saveData(data));
     }
 

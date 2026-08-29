@@ -26,12 +26,15 @@ import {
   LayoutDashboard,
   Loader2,
   LockKeyhole,
+  Pencil,
   Plus,
   Printer,
   ReceiptText,
   RotateCcw,
+  Save,
   ScanLine,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 
@@ -64,6 +67,11 @@ const emptyData: ControlData = {
   expenses: [],
   deposits: [],
 };
+
+type RecordTarget =
+  | { module: 'invoices'; record: Invoice }
+  | { module: 'expenses'; record: Expense }
+  | { module: 'deposits'; record: Deposit };
 
 const moduleInfo: Record<
   ModuleName,
@@ -213,6 +221,10 @@ export function ControlApp() {
   const [periodModal, setPeriodModal] = useState<ModuleName | null>(null);
   const [coverPeriodId, setCoverPeriodId] = useState<string | null>(null);
   const [periodToClose, setPeriodToClose] = useState<Period | null>(null);
+  const [recordToEdit, setRecordToEdit] = useState<RecordTarget | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<RecordTarget | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     try {
@@ -312,6 +324,28 @@ export function ControlApp() {
     }
   }
 
+  async function confirmDeleteRecord() {
+    if (!recordToDelete) return;
+
+    const payload =
+      recordToDelete.module === 'invoices'
+        ? {
+            action: 'delete_invoice',
+            invoiceId: recordToDelete.record.id,
+          }
+        : recordToDelete.module === 'expenses'
+          ? {
+              action: 'delete_expense',
+              expenseId: recordToDelete.record.id,
+            }
+          : {
+              action: 'delete_deposit',
+              depositId: recordToDelete.record.id,
+            };
+    const success = await act(payload, 'Lançamento excluído com sucesso.');
+    if (success) setRecordToDelete(null);
+  }
+
   return (
     <>
       <div className="app-shell min-h-dvh bg-[#efede9] text-[#171717]">
@@ -349,6 +383,12 @@ export function ControlApp() {
                     act={act}
                     onOpen={() => setPeriodModal('invoices')}
                     onClosePeriod={setPeriodToClose}
+                    onEdit={(record) =>
+                      setRecordToEdit({ module: 'invoices', record })
+                    }
+                    onDelete={(record) =>
+                      setRecordToDelete({ module: 'invoices', record })
+                    }
                   />
                 )}
                 {view === 'expenses' && (
@@ -359,6 +399,12 @@ export function ControlApp() {
                     act={act}
                     onOpen={() => setPeriodModal('expenses')}
                     onClosePeriod={setPeriodToClose}
+                    onEdit={(record) =>
+                      setRecordToEdit({ module: 'expenses', record })
+                    }
+                    onDelete={(record) =>
+                      setRecordToDelete({ module: 'expenses', record })
+                    }
                   />
                 )}
                 {view === 'deposits' && (
@@ -369,6 +415,12 @@ export function ControlApp() {
                     act={act}
                     onOpen={() => setPeriodModal('deposits')}
                     onClosePeriod={setPeriodToClose}
+                    onEdit={(record) =>
+                      setRecordToEdit({ module: 'deposits', record })
+                    }
+                    onDelete={(record) =>
+                      setRecordToDelete({ module: 'deposits', record })
+                    }
                   />
                 )}
                 {view === 'history' && (
@@ -425,6 +477,48 @@ export function ControlApp() {
               >
                 {working ? <Loader2 className="animate-spin" /> : <Archive />}
                 Confirmar encerramento
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        {recordToEdit && (
+          <EditRecordModal
+            target={recordToEdit}
+            working={working}
+            act={act}
+            onClose={() => setRecordToEdit(null)}
+          />
+        )}
+        <AlertDialog
+          open={Boolean(recordToDelete)}
+          onOpenChange={(open) => {
+            if (!open && !working) setRecordToDelete(null);
+          }}
+        >
+          <AlertDialogContent className="max-w-md overflow-hidden p-5 sm:p-6">
+            <AlertDialogHeader>
+              <AlertDialogMedia className="bg-red-50 text-red-700">
+                <Trash2 />
+              </AlertDialogMedia>
+              <AlertDialogTitle className="font-heading text-lg font-extrabold">
+                Excluir este lançamento?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="leading-6">
+                Essa ação retira o lançamento do período e atualiza os totais. A
+                exclusão não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-2">
+              <AlertDialogCancel disabled={working} className="h-11">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                disabled={working}
+                onClick={() => void confirmDeleteRecord()}
+                className="h-11 bg-red-700 text-white hover:bg-red-800"
+              >
+                {working ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                Excluir lançamento
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -812,6 +906,11 @@ type ModuleProps = {
   onClosePeriod: (period: Period) => void;
 };
 
+type RecordActionsProps<T> = {
+  onEdit: (record: T) => void;
+  onDelete: (record: T) => void;
+};
+
 function PeriodStep({
   module,
   period,
@@ -888,7 +987,9 @@ function InvoiceView({
   act,
   onOpen,
   onClosePeriod,
-}: ModuleProps) {
+  onEdit,
+  onDelete,
+}: ModuleProps & RecordActionsProps<Invoice>) {
   const records = period
     ? data.invoices.filter((item) => item.periodId === period.id)
     : [];
@@ -1071,7 +1172,11 @@ function InvoiceView({
           count={records.length}
         >
           {records.length ? (
-            <InvoiceRecords records={records} />
+            <InvoiceRecords
+              records={records}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           ) : (
             <EmptyRecords text="As notas registradas neste período aparecerão aqui." />
           )}
@@ -1097,7 +1202,9 @@ function ExpenseView({
   act,
   onOpen,
   onClosePeriod,
-}: ModuleProps) {
+  onEdit,
+  onDelete,
+}: ModuleProps & RecordActionsProps<Expense>) {
   const records = period
     ? data.expenses.filter((item) => item.periodId === period.id)
     : [];
@@ -1208,7 +1315,11 @@ function ExpenseView({
           count={records.length}
         >
           {records.length ? (
-            <ExpenseRecords records={records} />
+            <ExpenseRecords
+              records={records}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           ) : (
             <EmptyRecords text="As despesas registradas neste período aparecerão aqui." />
           )}
@@ -1225,7 +1336,9 @@ function DepositView({
   act,
   onOpen,
   onClosePeriod,
-}: ModuleProps) {
+  onEdit,
+  onDelete,
+}: ModuleProps & RecordActionsProps<Deposit>) {
   const records = period
     ? data.deposits.filter((item) => item.periodId === period.id)
     : [];
@@ -1327,7 +1440,11 @@ function DepositView({
           count={records.length}
         >
           {records.length ? (
-            <DepositRecords records={records} />
+            <DepositRecords
+              records={records}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
           ) : (
             <EmptyRecords text="Os depósitos registrados neste período aparecerão aqui." />
           )}
@@ -1537,14 +1654,11 @@ function PrintCover({
   const period = data.periods.find((item) => item.id === periodId);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [onClose]);
@@ -1934,7 +2048,11 @@ function EmptyRecords({ text }: { text: string }) {
   );
 }
 
-function InvoiceRecords({ records }: { records: Invoice[] }) {
+function InvoiceRecords({
+  records,
+  onEdit,
+  onDelete,
+}: { records: Invoice[] } & RecordActionsProps<Invoice>) {
   return (
     <>
       <div className="divide-y divide-zinc-100 md:hidden">
@@ -1967,6 +2085,7 @@ function InvoiceRecords({ records }: { records: Invoice[] }) {
                 </dd>
               </div>
             </dl>
+            <RecordButtons record={item} onEdit={onEdit} onDelete={onDelete} />
           </article>
         ))}
       </div>
@@ -1978,6 +2097,7 @@ function InvoiceRecords({ records }: { records: Invoice[] }) {
               <Th>Emissão</Th>
               <Th>Número</Th>
               <Th>Vencimento(s)</Th>
+              <Th>Ações</Th>
             </tr>
           </thead>
           <tbody>
@@ -1994,6 +2114,14 @@ function InvoiceRecords({ records }: { records: Invoice[] }) {
                 <Td>{dateLabel(item.issueDate)}</Td>
                 <Td>{item.invoiceNumber}</Td>
                 <Td>{item.dueDates.map(dateLabel).join(', ')}</Td>
+                <Td>
+                  <RecordButtons
+                    record={item}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    compact
+                  />
+                </Td>
               </tr>
             ))}
           </tbody>
@@ -2003,7 +2131,11 @@ function InvoiceRecords({ records }: { records: Invoice[] }) {
   );
 }
 
-function ExpenseRecords({ records }: { records: Expense[] }) {
+function ExpenseRecords({
+  records,
+  onEdit,
+  onDelete,
+}: { records: Expense[] } & RecordActionsProps<Expense>) {
   return (
     <>
       <div className="divide-y divide-zinc-100 md:hidden">
@@ -2024,6 +2156,7 @@ function ExpenseRecords({ records }: { records: Expense[] }) {
                 {dateLabel(item.settledDate)}
               </span>
             </p>
+            <RecordButtons record={item} onEdit={onEdit} onDelete={onDelete} />
           </article>
         ))}
       </div>
@@ -2035,6 +2168,7 @@ function ExpenseRecords({ records }: { records: Expense[] }) {
               <Th>Data</Th>
               <Th>Valor</Th>
               <Th>Baixa</Th>
+              <Th>Ações</Th>
             </tr>
           </thead>
           <tbody>
@@ -2044,6 +2178,14 @@ function ExpenseRecords({ records }: { records: Expense[] }) {
                 <Td>{dateLabel(item.expenseDate)}</Td>
                 <Td strong>{currency(item.amountCents)}</Td>
                 <Td>{dateLabel(item.settledDate)}</Td>
+                <Td>
+                  <RecordButtons
+                    record={item}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    compact
+                  />
+                </Td>
               </tr>
             ))}
           </tbody>
@@ -2053,7 +2195,11 @@ function ExpenseRecords({ records }: { records: Expense[] }) {
   );
 }
 
-function DepositRecords({ records }: { records: Deposit[] }) {
+function DepositRecords({
+  records,
+  onEdit,
+  onDelete,
+}: { records: Deposit[] } & RecordActionsProps<Deposit>) {
   return (
     <>
       <div className="divide-y divide-zinc-100 md:hidden">
@@ -2070,6 +2216,7 @@ function DepositRecords({ records }: { records: Deposit[] }) {
               </div>
               <p className="font-bold">{currency(item.amountCents)}</p>
             </div>
+            <RecordButtons record={item} onEdit={onEdit} onDelete={onDelete} />
           </article>
         ))}
       </div>
@@ -2080,6 +2227,7 @@ function DepositRecords({ records }: { records: Deposit[] }) {
               <Th>Data</Th>
               <Th>Depositante</Th>
               <Th>Valor</Th>
+              <Th>Ações</Th>
             </tr>
           </thead>
           <tbody>
@@ -2088,12 +2236,54 @@ function DepositRecords({ records }: { records: Deposit[] }) {
                 <Td>{dateLabel(item.depositDate)}</Td>
                 <Td strong>{item.depositor ?? 'Não informado'}</Td>
                 <Td strong>{currency(item.amountCents)}</Td>
+                <Td>
+                  <RecordButtons
+                    record={item}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    compact
+                  />
+                </Td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
     </>
+  );
+}
+
+function RecordButtons<T>({
+  record,
+  onEdit,
+  onDelete,
+  compact = false,
+}: RecordActionsProps<T> & { record: T; compact?: boolean }) {
+  return (
+    <div
+      className={`flex items-center gap-2 ${compact ? '' : 'mt-3 border-t border-zinc-100 pt-3'}`}
+    >
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onEdit(record)}
+        className={compact ? 'h-9 w-9 px-0' : 'h-10 flex-1'}
+        aria-label="Editar lançamento"
+        title="Editar lançamento"
+      >
+        <Pencil /> <span className={compact ? 'sr-only' : ''}>Editar</span>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onDelete(record)}
+        className={`${compact ? 'h-9 w-9 px-0' : 'h-10 flex-1'} border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800`}
+        aria-label="Excluir lançamento"
+        title="Excluir lançamento"
+      >
+        <Trash2 /> <span className={compact ? 'sr-only' : ''}>Excluir</span>
+      </Button>
+    </div>
   );
 }
 
@@ -2111,6 +2301,417 @@ function Td({ children, strong }: { children: ReactNode; strong?: boolean }) {
     >
       {children}
     </td>
+  );
+}
+
+function EditRecordModal({
+  target,
+  working,
+  act,
+  onClose,
+}: {
+  target: RecordTarget;
+  working: boolean;
+  act: ModuleProps['act'];
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !working) onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [onClose, working]);
+
+  return (
+    <dialog
+      open
+      aria-modal="true"
+      aria-labelledby="edit-record-title"
+      className="fixed inset-0 z-[70] flex h-full w-full max-w-none items-start justify-center overflow-y-auto border-0 bg-black/60 p-3 sm:items-center sm:p-6"
+    >
+      <div className="my-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <header className="flex items-start justify-between gap-4 bg-[#17120f] p-5 text-white">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#d2b8a7]">
+              <Pencil className="size-5" />
+            </span>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">
+                Corrigir lançamento
+              </p>
+              <h2
+                id="edit-record-title"
+                className="font-heading mt-1 text-lg font-extrabold"
+              >
+                Editar {moduleInfo[target.module].singular}
+              </h2>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={working}
+            aria-label="Fechar edição"
+            className="rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        </header>
+        <div className="p-5">
+          {target.module === 'invoices' ? (
+            <EditInvoiceForm
+              record={target.record}
+              working={working}
+              act={act}
+              onClose={onClose}
+            />
+          ) : target.module === 'expenses' ? (
+            <EditExpenseForm
+              record={target.record}
+              working={working}
+              act={act}
+              onClose={onClose}
+            />
+          ) : (
+            <EditDepositForm
+              record={target.record}
+              working={working}
+              act={act}
+              onClose={onClose}
+            />
+          )}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+function EditInvoiceForm({
+  record,
+  working,
+  act,
+  onClose,
+}: {
+  record: Invoice;
+  working: boolean;
+  act: ModuleProps['act'];
+  onClose: () => void;
+}) {
+  const [dueDates, setDueDates] = useState(
+    record.dueDates.length ? record.dueDates : [today()],
+  );
+  const [accessKey, setAccessKey] = useState(record.accessKey ?? '');
+  const formRef = useRef<HTMLFormElement>(null);
+  const supplierRef = useRef<HTMLInputElement>(null);
+  useAdvanceOnEnter(formRef);
+
+  useEffect(() => {
+    supplierRef.current?.focus();
+  }, []);
+
+  async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (
+      await act(
+        {
+          action: 'update_invoice',
+          invoiceId: record.id,
+          supplier: form.get('supplier'),
+          issueDate: form.get('issueDate'),
+          invoiceNumber: form.get('invoiceNumber'),
+          accessKey,
+          dueDates,
+        },
+        'Nota fiscal corrigida com sucesso.',
+      )
+    ) {
+      onClose();
+    }
+  }
+
+  return (
+    <form ref={formRef} onSubmit={submit} className="space-y-4">
+      <Field label="Fornecedor">
+        <Input
+          ref={supplierRef}
+          name="supplier"
+          defaultValue={record.supplier}
+          required
+          disabled={working}
+        />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Data de emissão" hint="DD/MM/AAAA">
+          <Input
+            name="issueDate"
+            type="date"
+            defaultValue={record.issueDate}
+            required
+            disabled={working}
+          />
+        </Field>
+        <Field label="Número da nota">
+          <Input
+            name="invoiceNumber"
+            defaultValue={record.invoiceNumber}
+            required
+            disabled={working}
+          />
+        </Field>
+      </div>
+      <Field label="Chave de acesso" hint="opcional">
+        <Input
+          inputMode="numeric"
+          maxLength={44}
+          value={accessKey}
+          onChange={(event) =>
+            setAccessKey(event.target.value.replace(/\D/g, '').slice(0, 44))
+          }
+          disabled={working}
+        />
+      </Field>
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold">Vencimento(s)</span>
+          <button
+            type="button"
+            onClick={() => setDueDates([...dueDates, today()])}
+            disabled={working}
+            className="text-xs font-bold text-[#765541]"
+          >
+            + outro vencimento
+          </button>
+        </div>
+        <div className="space-y-2">
+          {dueDates.map((date, index) => (
+            <div key={`edit-due-date-${index}`} className="flex gap-2">
+              <Input
+                type="date"
+                value={date}
+                onChange={(event) =>
+                  setDueDates(
+                    dueDates.map((item, current) =>
+                      current === index ? event.target.value : item,
+                    ),
+                  )
+                }
+                required
+                disabled={working}
+              />
+              {dueDates.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setDueDates(
+                      dueDates.filter((_, current) => current !== index),
+                    )
+                  }
+                  className="h-11 w-11"
+                  aria-label="Remover vencimento"
+                >
+                  <X />
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <EditFormActions working={working} onClose={onClose} />
+    </form>
+  );
+}
+
+function EditExpenseForm({
+  record,
+  working,
+  act,
+  onClose,
+}: {
+  record: Expense;
+  working: boolean;
+  act: ModuleProps['act'];
+  onClose: () => void;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  useAdvanceOnEnter(formRef);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
+
+  async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (
+      await act(
+        {
+          action: 'update_expense',
+          expenseId: record.id,
+          name: form.get('name'),
+          expenseDate: form.get('expenseDate'),
+          amount: form.get('amount'),
+          settledDate: form.get('settledDate'),
+        },
+        'Despesa corrigida com sucesso.',
+      )
+    ) {
+      onClose();
+    }
+  }
+
+  return (
+    <form ref={formRef} onSubmit={submit} className="space-y-4">
+      <Field label="Nome da despesa">
+        <Input
+          ref={nameRef}
+          name="name"
+          defaultValue={record.name}
+          required
+          disabled={working}
+        />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Data da despesa" hint="DD/MM/AAAA">
+          <Input
+            name="expenseDate"
+            type="date"
+            defaultValue={record.expenseDate}
+            required
+            disabled={working}
+          />
+        </Field>
+        <Field label="Valor">
+          <Input
+            name="amount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            defaultValue={(record.amountCents / 100).toFixed(2)}
+            required
+            disabled={working}
+          />
+        </Field>
+      </div>
+      <Field label="Data da baixa" hint="opcional · DD/MM/AAAA">
+        <Input
+          name="settledDate"
+          type="date"
+          defaultValue={record.settledDate ?? ''}
+          disabled={working}
+        />
+      </Field>
+      <EditFormActions working={working} onClose={onClose} />
+    </form>
+  );
+}
+
+function EditDepositForm({
+  record,
+  working,
+  act,
+  onClose,
+}: {
+  record: Deposit;
+  working: boolean;
+  act: ModuleProps['act'];
+  onClose: () => void;
+}) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  useAdvanceOnEnter(formRef);
+
+  useEffect(() => {
+    dateRef.current?.focus();
+  }, []);
+
+  async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (
+      await act(
+        {
+          action: 'update_deposit',
+          depositId: record.id,
+          depositDate: form.get('depositDate'),
+          amount: form.get('amount'),
+          depositor: form.get('depositor'),
+        },
+        'Depósito corrigido com sucesso.',
+      )
+    ) {
+      onClose();
+    }
+  }
+
+  return (
+    <form ref={formRef} onSubmit={submit} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Data do depósito" hint="DD/MM/AAAA">
+          <Input
+            ref={dateRef}
+            name="depositDate"
+            type="date"
+            defaultValue={record.depositDate}
+            required
+            disabled={working}
+          />
+        </Field>
+        <Field label="Valor">
+          <Input
+            name="amount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            defaultValue={(record.amountCents / 100).toFixed(2)}
+            required
+            disabled={working}
+          />
+        </Field>
+      </div>
+      <Field label="Depositante" hint="opcional">
+        <Input
+          name="depositor"
+          defaultValue={record.depositor ?? ''}
+          disabled={working}
+        />
+      </Field>
+      <EditFormActions working={working} onClose={onClose} />
+    </form>
+  );
+}
+
+function EditFormActions({
+  working,
+  onClose,
+}: {
+  working: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 pt-1">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onClose}
+        disabled={working}
+        className="h-11"
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        disabled={working}
+        className="h-11 bg-black text-white hover:bg-zinc-800"
+      >
+        {working ? <Loader2 className="animate-spin" /> : <Save />}
+        Salvar correção
+      </Button>
+    </div>
   );
 }
 
