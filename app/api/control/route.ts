@@ -65,6 +65,14 @@ function amountInCents(value: unknown) {
     : null;
 }
 
+function invoiceAmountsInCents(value: unknown, dueDateCount: number) {
+  if (!Array.isArray(value) || value.length !== dueDateCount) return null;
+  const amounts = value.map((amount) => Number(amount));
+  return amounts.every((amount) => Number.isInteger(amount) && amount > 0)
+    ? amounts
+    : null;
+}
+
 function updateRecordStatus(
   data: ControlData,
   module: ModuleName,
@@ -168,6 +176,17 @@ async function handleAction(body: Record<string, unknown>) {
         (date): date is string => typeof date === 'string' && Boolean(date),
       );
       if (!dueDates.length) return error('Informe ao menos um vencimento.');
+      const installmentAmountsCents = invoiceAmountsInCents(
+        body.installmentAmountsCents,
+        dueDates.length,
+      );
+      if (!installmentAmountsCents) {
+        return error(
+          dueDates.length === 1
+            ? 'Informe o valor total da nota.'
+            : 'Informe o valor de todas as parcelas.',
+        );
+      }
       const invoice: Invoice = {
         id: crypto.randomUUID(),
         periodId: period.id,
@@ -182,6 +201,7 @@ async function handleAction(body: Record<string, unknown>) {
             : null,
         resentFromId: null,
         dueDates,
+        installmentAmountsCents,
         createdAt: timestamp(),
       };
       data.invoices.unshift(invoice);
@@ -212,6 +232,17 @@ async function handleAction(body: Record<string, unknown>) {
         (date): date is string => typeof date === 'string' && Boolean(date),
       );
       if (!dueDates.length) return error('Informe ao menos um vencimento.');
+      const installmentAmountsCents = invoiceAmountsInCents(
+        body.installmentAmountsCents,
+        dueDates.length,
+      );
+      if (!installmentAmountsCents) {
+        return error(
+          dueDates.length === 1
+            ? 'Informe o valor total da nota.'
+            : 'Informe o valor de todas as parcelas.',
+        );
+      }
       invoice.supplier = body.supplier.trim();
       invoice.issueDate = body.issueDate;
       invoice.invoiceNumber = body.invoiceNumber.trim();
@@ -220,6 +251,7 @@ async function handleAction(body: Record<string, unknown>) {
           ? body.accessKey.replace(/\D/g, '').slice(0, 44) || null
           : null;
       invoice.dueDates = dueDates;
+      invoice.installmentAmountsCents = installmentAmountsCents;
       return NextResponse.json(await saveData(data));
     }
 

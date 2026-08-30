@@ -149,6 +149,21 @@ const currency = (cents: number) =>
     cents / 100,
   );
 
+function parseCurrencyDraft(value: string) {
+  const cleaned = value.replace(/[^\d,.-]/g, '').trim();
+  if (!cleaned) return null;
+  const dotParts = cleaned.split('.');
+  const normalized = cleaned.includes(',')
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : dotParts.length > 2 || dotParts.at(-1)?.length === 3
+      ? cleaned.replace(/\./g, '')
+      : cleaned;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0
+    ? Math.round(amount * 100)
+    : null;
+}
+
 const dateLabel = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat('pt-BR').format(
@@ -994,6 +1009,9 @@ function InvoiceView({
     ? data.invoices.filter((item) => item.periodId === period.id)
     : [];
   const [dueDates, setDueDates] = useState([today()]);
+  const [installmentAmounts, setInstallmentAmounts] = useState<
+    Array<number | null>
+  >([null]);
   const [accessKey, setAccessKey] = useState('');
   const [scanner, setScanner] = useState(false);
   const supplierRef = useRef<HTMLInputElement>(null);
@@ -1017,6 +1035,7 @@ function InvoiceView({
         invoiceNumber: form.get('invoiceNumber'),
         accessKey,
         dueDates,
+        installmentAmountsCents: installmentAmounts,
       },
       'Nota fiscal registrada com sucesso.',
     );
@@ -1024,6 +1043,7 @@ function InvoiceView({
       formElement.reset();
       setAccessKey('');
       setDueDates([today()]);
+      setInstallmentAmounts([null]);
       supplierRef.current?.focus();
     }
   }
@@ -1120,7 +1140,10 @@ function InvoiceView({
                 <button
                   type="button"
                   disabled={!period}
-                  onClick={() => setDueDates([...dueDates, today()])}
+                  onClick={() => {
+                    setDueDates([...dueDates, today()]);
+                    setInstallmentAmounts([...installmentAmounts, null]);
+                  }}
                   className="text-xs font-bold text-[#765541]"
                 >
                   + outro vencimento
@@ -1147,17 +1170,57 @@ function InvoiceView({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() =>
+                        onClick={() => {
                           setDueDates(
                             dueDates.filter((_, current) => current !== index),
-                          )
-                        }
+                          );
+                          setInstallmentAmounts(
+                            installmentAmounts.filter(
+                              (_, current) => current !== index,
+                            ),
+                          );
+                        }}
                         className="h-11 w-11"
                       >
                         <X />
                       </Button>
                     )}
                   </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#d8c9bf] bg-[#f8f4f1] p-3">
+              <p className="mb-3 text-sm font-bold text-[#5f4333]">
+                {dueDates.length === 1
+                  ? 'Valor total da nota'
+                  : 'Valor de cada parcela'}
+              </p>
+              <div className="space-y-3">
+                {installmentAmounts.map((amount, index) => (
+                  <Field
+                    key={`invoice-amount-${index}`}
+                    label={
+                      dueDates.length === 1 ? 'Valor' : `Parcela ${index + 1}`
+                    }
+                    hint={`vencimento ${dateLabel(dueDates[index])}`}
+                  >
+                    <CurrencyInput
+                      valueCents={amount}
+                      onValueChange={(value) =>
+                        setInstallmentAmounts(
+                          installmentAmounts.map((item, current) =>
+                            current === index ? value : item,
+                          ),
+                        )
+                      }
+                      disabled={!period || working}
+                      ariaLabel={
+                        dueDates.length === 1
+                          ? 'Valor total da nota'
+                          : `Valor da parcela ${index + 1}`
+                      }
+                    />
+                  </Field>
                 ))}
               </div>
             </div>
@@ -1533,10 +1596,9 @@ function HistoryView({
                     </div>
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
                       {invoice.periodLabel} · Emissão{' '}
-                      {dateLabel(invoice.issueDate)} · Vencimento
-                      {invoice.dueDates.length > 1 ? 's' : ''}:{' '}
-                      {invoice.dueDates.map(dateLabel).join(', ')}
+                      {dateLabel(invoice.issueDate)}
                     </p>
+                    <InvoiceDueValues invoice={invoice} className="mt-1" />
                   </div>
                   <Button
                     variant="outline"
@@ -1815,10 +1877,10 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
       <table className="w-full table-fixed text-left text-[10px]">
         <thead className="bg-black text-white">
           <tr>
-            <PrintTh className="w-[38%]">Fornecedor</PrintTh>
-            <PrintTh className="w-[16%]">Emissão</PrintTh>
-            <PrintTh className="w-[18%]">Nota</PrintTh>
-            <PrintTh className="w-[28%]">Vencimento(s)</PrintTh>
+            <PrintTh className="w-[34%]">Fornecedor</PrintTh>
+            <PrintTh className="w-[15%]">Emissão</PrintTh>
+            <PrintTh className="w-[16%]">Nota</PrintTh>
+            <PrintTh className="w-[35%]">Vencimento(s) e valor(es)</PrintTh>
           </tr>
         </thead>
         <tbody>
@@ -1827,7 +1889,9 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
               <PrintTd strong>{item.supplier}</PrintTd>
               <PrintTd>{dateLabel(item.issueDate)}</PrintTd>
               <PrintTd>{item.invoiceNumber}</PrintTd>
-              <PrintTd>{item.dueDates.map(dateLabel).join(', ')}</PrintTd>
+              <PrintTd>
+                <InvoiceDueValues invoice={item} />
+              </PrintTd>
             </tr>
           ))}
         </tbody>
@@ -2007,6 +2071,74 @@ function Field({
   );
 }
 
+function CurrencyInput({
+  valueCents,
+  onValueChange,
+  disabled = false,
+  ariaLabel,
+}: {
+  valueCents: number | null;
+  onValueChange: (value: number | null) => void;
+  disabled?: boolean;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState(
+    valueCents === null
+      ? ''
+      : new Intl.NumberFormat('pt-BR', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(valueCents / 100),
+  );
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setDraft(
+        valueCents === null
+          ? ''
+          : new Intl.NumberFormat('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }).format(valueCents / 100),
+      );
+    }
+  }, [valueCents]);
+
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-500">
+        R$
+      </span>
+      <Input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          onValueChange(parseCurrencyDraft(event.target.value));
+        }}
+        onBlur={() => {
+          setDraft(
+            valueCents === null
+              ? ''
+              : new Intl.NumberFormat('pt-BR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }).format(valueCents / 100),
+          );
+        }}
+        placeholder="0,00"
+        aria-label={ariaLabel}
+        required
+        disabled={disabled}
+        className="pl-10 text-right tabular-nums"
+      />
+    </div>
+  );
+}
+
 function SubmitButton({
   children,
   disabled,
@@ -2048,6 +2180,33 @@ function EmptyRecords({ text }: { text: string }) {
   );
 }
 
+function InvoiceDueValues({
+  invoice,
+  className = '',
+}: {
+  invoice: Invoice;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-0.5 leading-5 ${className}`}>
+      {invoice.dueDates.map((dueDate, index) => {
+        const amount = invoice.installmentAmountsCents?.[index];
+        return (
+          <div key={`${invoice.id}-due-${index}`}>
+            {invoice.dueDates.length > 1 && `${index + 1}ª parcela: `}
+            {dateLabel(dueDate)} ·{' '}
+            <span className="font-bold text-current">
+              {typeof amount === 'number'
+                ? currency(amount)
+                : 'Valor não informado'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function InvoiceRecords({
   records,
   onEdit,
@@ -2080,8 +2239,8 @@ function InvoiceRecords({
               </div>
               <div>
                 <dt className="text-zinc-400">Vencimento(s)</dt>
-                <dd className="mt-1 font-semibold leading-5">
-                  {item.dueDates.map(dateLabel).join(', ')}
+                <dd className="mt-1 font-semibold">
+                  <InvoiceDueValues invoice={item} />
                 </dd>
               </div>
             </dl>
@@ -2096,7 +2255,7 @@ function InvoiceRecords({
               <Th>Fornecedor</Th>
               <Th>Emissão</Th>
               <Th>Número</Th>
-              <Th>Vencimento(s)</Th>
+              <Th>Vencimento(s) e valor(es)</Th>
               <Th>Ações</Th>
             </tr>
           </thead>
@@ -2113,7 +2272,9 @@ function InvoiceRecords({
                 </Td>
                 <Td>{dateLabel(item.issueDate)}</Td>
                 <Td>{item.invoiceNumber}</Td>
-                <Td>{item.dueDates.map(dateLabel).join(', ')}</Td>
+                <Td>
+                  <InvoiceDueValues invoice={item} />
+                </Td>
                 <Td>
                   <RecordButtons
                     record={item}
@@ -2401,6 +2562,13 @@ function EditInvoiceForm({
   const [dueDates, setDueDates] = useState(
     record.dueDates.length ? record.dueDates : [today()],
   );
+  const [installmentAmounts, setInstallmentAmounts] = useState<
+    Array<number | null>
+  >(
+    record.dueDates.map(
+      (_, index) => record.installmentAmountsCents?.[index] ?? null,
+    ),
+  );
   const [accessKey, setAccessKey] = useState(record.accessKey ?? '');
   const formRef = useRef<HTMLFormElement>(null);
   const supplierRef = useRef<HTMLInputElement>(null);
@@ -2423,6 +2591,7 @@ function EditInvoiceForm({
           invoiceNumber: form.get('invoiceNumber'),
           accessKey,
           dueDates,
+          installmentAmountsCents: installmentAmounts,
         },
         'Nota fiscal corrigida com sucesso.',
       )
@@ -2477,7 +2646,10 @@ function EditInvoiceForm({
           <span className="text-sm font-semibold">Vencimento(s)</span>
           <button
             type="button"
-            onClick={() => setDueDates([...dueDates, today()])}
+            onClick={() => {
+              setDueDates([...dueDates, today()]);
+              setInstallmentAmounts([...installmentAmounts, null]);
+            }}
             disabled={working}
             className="text-xs font-bold text-[#765541]"
           >
@@ -2505,11 +2677,16 @@ function EditInvoiceForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() =>
+                  onClick={() => {
                     setDueDates(
                       dueDates.filter((_, current) => current !== index),
-                    )
-                  }
+                    );
+                    setInstallmentAmounts(
+                      installmentAmounts.filter(
+                        (_, current) => current !== index,
+                      ),
+                    );
+                  }}
                   className="h-11 w-11"
                   aria-label="Remover vencimento"
                 >
@@ -2517,6 +2694,39 @@ function EditInvoiceForm({
                 </Button>
               )}
             </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-xl border border-[#d8c9bf] bg-[#f8f4f1] p-3">
+        <p className="mb-3 text-sm font-bold text-[#5f4333]">
+          {dueDates.length === 1
+            ? 'Valor total da nota'
+            : 'Valor de cada parcela'}
+        </p>
+        <div className="space-y-3">
+          {installmentAmounts.map((amount, index) => (
+            <Field
+              key={`edit-invoice-amount-${index}`}
+              label={dueDates.length === 1 ? 'Valor' : `Parcela ${index + 1}`}
+              hint={`vencimento ${dateLabel(dueDates[index])}`}
+            >
+              <CurrencyInput
+                valueCents={amount}
+                onValueChange={(value) =>
+                  setInstallmentAmounts(
+                    installmentAmounts.map((item, current) =>
+                      current === index ? value : item,
+                    ),
+                  )
+                }
+                disabled={working}
+                ariaLabel={
+                  dueDates.length === 1
+                    ? 'Valor total da nota'
+                    : `Valor da parcela ${index + 1}`
+                }
+              />
+            </Field>
           ))}
         </div>
       </div>

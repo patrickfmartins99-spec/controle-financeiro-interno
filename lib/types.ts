@@ -22,6 +22,7 @@ export type Invoice = {
   accessKey: string | null;
   resentFromId: string | null;
   dueDates: string[];
+  installmentAmountsCents?: number[];
   createdAt: string;
 };
 
