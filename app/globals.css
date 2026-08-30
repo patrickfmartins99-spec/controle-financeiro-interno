@@ -146,6 +146,10 @@
     color: #e4e4e7 !important;
   }
 
+  .print-document-header .print-unit-label {
+    color: white !important;
+  }
+
   .print-cover-logo {
     height: 30px !important;
   }

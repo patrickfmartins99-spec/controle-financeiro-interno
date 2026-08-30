@@ -1818,6 +1818,9 @@ function PrintCover({
             <h1 className="mt-1 text-lg font-extrabold">
               Relatório de {moduleInfo[period.module].title.toLowerCase()}
             </h1>
+            <p className="print-unit-label mt-1 text-xs font-extrabold uppercase tracking-[0.08em] text-white">
+              Unidade Balneário Piçarras
+            </p>
           </div>
         </header>
 
