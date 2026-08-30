@@ -1744,9 +1744,9 @@ function PrintCover({
         : null;
   const invoiceColumnCount =
     period.module === 'invoices'
-      ? invoices.length > 48
+      ? invoices.length > 24
         ? 3
-        : invoices.length > 18
+        : invoices.length > 12
           ? 2
           : 1
       : 1;
