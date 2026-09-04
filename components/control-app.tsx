@@ -1742,29 +1742,6 @@ function PrintCover({
       : period.module === 'deposits'
         ? deposits.reduce((sum, item) => sum + item.amountCents, 0)
         : null;
-  const invoiceColumnCount =
-    period.module === 'invoices'
-      ? invoices.length > 24
-        ? 3
-        : invoices.length > 12
-          ? 2
-          : 1
-      : 1;
-  const landscapeInvoices = invoiceColumnCount > 1;
-  const invoicesPerColumn = Math.ceil(invoices.length / invoiceColumnCount);
-  const invoiceGroups = Array.from({ length: invoiceColumnCount }, (_, index) =>
-    invoices.slice(index * invoicesPerColumn, (index + 1) * invoicesPerColumn),
-  );
-  const printDensity =
-    period.module === 'invoices'
-      ? ''
-      : records.length > 60
-        ? 'print-density-ultra'
-        : records.length > 40
-          ? 'print-density-tight'
-          : records.length > 22
-            ? 'print-density-compact'
-            : '';
 
   return (
     <dialog
@@ -1774,12 +1751,12 @@ function PrintCover({
       aria-label="Capa do período encerrado"
     >
       <div
-        className={`print-actions sticky top-0 z-10 mx-auto mb-4 flex items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-lg sm:p-4 ${landscapeInvoices ? 'max-w-[297mm]' : 'max-w-[210mm]'}`}
+        className="print-actions sticky top-0 z-10 mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-lg sm:p-4"
       >
         <div>
           <p className="text-sm font-bold">Capa pronta</p>
           <p className="text-xs text-zinc-500">
-            Confira as informações antes de imprimir.
+            A4 vertical · Confira as informações antes de imprimir.
           </p>
         </div>
         <div className="flex gap-2">
@@ -1801,7 +1778,7 @@ function PrintCover({
       </div>
 
       <article
-        className={`print-document ${printDensity} ${landscapeInvoices ? 'print-invoice-landscape min-h-[210mm] max-w-[297mm]' : 'min-h-[297mm] max-w-[210mm]'} mx-auto w-full bg-white p-6 text-black shadow-2xl sm:p-10`}
+        className="print-document mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10"
       >
         <header className="print-document-header flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-4 text-white">
           <Image
@@ -1839,15 +1816,12 @@ function PrintCover({
           </div>
 
           {total !== null && (
-            <div className="mt-5 flex flex-col items-start justify-between gap-4 rounded-xl bg-[#eee5df] px-5 py-4 sm:flex-row sm:items-end sm:gap-6">
+            <div className="print-total mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border-2 border-black bg-white px-4 py-3 sm:flex-row sm:items-center sm:gap-6">
               <div>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#765541]">
+                <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-black">
                   {period.module === 'expenses'
                     ? 'Total de despesas'
                     : 'Total depositado'}
-                </p>
-                <p className="mt-1 text-xs text-[#765541]">
-                  Somente os lançamentos deste período
                 </p>
               </div>
               <p className="text-2xl font-extrabold">{currency(total)}</p>
@@ -1868,20 +1842,7 @@ function PrintCover({
               Este período foi encerrado sem lançamentos.
             </div>
           ) : period.module === 'invoices' ? (
-            landscapeInvoices ? (
-              <div
-                className={`print-invoice-grid grid grid-cols-1 gap-4 ${invoiceColumnCount === 3 ? 'print-invoice-columns-3 lg:grid-cols-3' : 'print-invoice-columns-2 lg:grid-cols-2'}`}
-              >
-                {invoiceGroups.map((group, index) => (
-                  <PrintInvoiceCards
-                    key={`invoice-column-${index}`}
-                    records={group}
-                  />
-                ))}
-              </div>
-            ) : (
-              <PrintInvoiceTable records={invoices} />
-            )
+            <PrintInvoiceTable records={invoices} />
           ) : period.module === 'expenses' ? (
             <PrintExpenseTable records={expenses} />
           ) : (
@@ -1910,9 +1871,9 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
       <table className="w-full table-fixed text-left text-[10px]">
         <thead className="bg-black text-white">
           <tr>
-            <PrintTh className="w-[34%]">Fornecedor</PrintTh>
+            <PrintTh className="w-[40%]">Fornecedor</PrintTh>
             <PrintTh className="w-[15%]">Emissão</PrintTh>
-            <PrintTh className="w-[16%]">Nota</PrintTh>
+            <PrintTh className="w-[10%]">Nota</PrintTh>
             <PrintTh className="w-[35%]">Vencimento(s) e valor(es)</PrintTh>
           </tr>
         </thead>
@@ -1923,39 +1884,12 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
               <PrintTd>{dateLabel(item.issueDate)}</PrintTd>
               <PrintTd>{item.invoiceNumber}</PrintTd>
               <PrintTd>
-                <InvoiceDueValues invoice={item} />
+                <InvoiceDueValues invoice={item} className="print-invoice-dues" />
               </PrintTd>
             </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function PrintInvoiceCards({ records }: { records: Invoice[] }) {
-  return (
-    <div className="print-invoice-column overflow-hidden rounded-lg border border-zinc-400 bg-white">
-      {records.map((item) => (
-        <article
-          key={item.id}
-          className="print-invoice-item border-b border-zinc-300 px-3 py-2 last:border-b-0"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 font-extrabold text-black">{item.supplier}</p>
-            <p className="shrink-0 font-extrabold text-black">
-              NF {item.invoiceNumber}
-            </p>
-          </div>
-          <p className="mt-0.5 font-semibold text-zinc-800">
-            Emissão: {dateLabel(item.issueDate)}
-          </p>
-          <InvoiceDueValues
-            invoice={item}
-            className="mt-0.5 font-semibold text-zinc-900"
-          />
-        </article>
-      ))}
     </div>
   );
 }
@@ -1968,7 +1902,7 @@ function PrintExpenseTable({ records }: { records: Expense[] }) {
           <tr>
             <PrintTh className="w-[38%]">Despesa</PrintTh>
             <PrintTh className="w-[20%]">Data</PrintTh>
-            <PrintTh className="w-[22%]">Valor</PrintTh>
+            <PrintTh className="w-[22%] text-right">Valor</PrintTh>
             <PrintTh className="w-[20%]">Baixa</PrintTh>
           </tr>
         </thead>
@@ -1977,7 +1911,7 @@ function PrintExpenseTable({ records }: { records: Expense[] }) {
             <tr key={item.id} className="border-t border-zinc-200 align-top">
               <PrintTd strong>{item.name}</PrintTd>
               <PrintTd>{dateLabel(item.expenseDate)}</PrintTd>
-              <PrintTd strong>{currency(item.amountCents)}</PrintTd>
+              <PrintTd strong className="text-right tabular-nums">{currency(item.amountCents)}</PrintTd>
               <PrintTd>{dateLabel(item.settledDate)}</PrintTd>
             </tr>
           ))}
