@@ -1,5 +1,6 @@
 export type ModuleName = 'invoices' | 'expenses' | 'deposits';
 export type ViewName = 'overview' | ModuleName | 'history';
+export type WorkShift = 'day' | 'night';
 
 export type Period = {
   id: string;

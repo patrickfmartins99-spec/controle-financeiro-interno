@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs';
 import { NextResponse } from 'next/server';
 
-import type { ControlData, Invoice, ModuleName } from '@/lib/types';
+import type { ControlData, Invoice, ModuleName, WorkShift } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,16 +22,26 @@ function validModule(value: unknown): value is ModuleName {
   return typeof value === 'string' && modules.includes(value as ModuleName);
 }
 
-async function readData(): Promise<ControlData> {
+function shiftFrom(request: Request): WorkShift {
+  return new URL(request.url).searchParams.get('shift') === 'night'
+    ? 'night'
+    : 'day';
+}
+
+function dataKey(shift: WorkShift) {
+  return shift === 'night' ? 'control-data-night' : 'control-data';
+}
+
+async function readData(shift: WorkShift): Promise<ControlData> {
   return (
-    ((await store().get('control-data', {
+    ((await store().get(dataKey(shift), {
       type: 'json',
     })) as ControlData | null) ?? emptyData
   );
 }
 
-async function saveData(data: ControlData) {
-  await store().setJSON('control-data', data);
+async function saveData(shift: WorkShift, data: ControlData) {
+  await store().setJSON(dataKey(shift), data);
   return data;
 }
 
@@ -94,8 +104,11 @@ function updateRecordStatus(
   }
 }
 
-async function handleAction(body: Record<string, unknown>) {
-  const data = await readData();
+async function handleAction(
+  shift: WorkShift,
+  body: Record<string, unknown>,
+) {
+  const data = await readData(shift);
 
   switch (body.action) {
     case 'open_period': {
@@ -119,7 +132,7 @@ async function handleAction(body: Record<string, unknown>) {
         closedAt: null,
         createdAt: now,
       });
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'close_period': {
@@ -129,7 +142,7 @@ async function handleAction(body: Record<string, unknown>) {
       period.status = 'closed';
       period.closedAt = timestamp();
       updateRecordStatus(data, period.module, period.id, 'closed');
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'reopen_period': {
@@ -152,7 +165,7 @@ async function handleAction(body: Record<string, unknown>) {
       period.status = 'open';
       period.closedAt = null;
       updateRecordStatus(data, period.module, period.id, 'open');
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'add_invoice': {
@@ -205,7 +218,7 @@ async function handleAction(body: Record<string, unknown>) {
         createdAt: timestamp(),
       };
       data.invoices.unshift(invoice);
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'update_invoice': {
@@ -252,7 +265,7 @@ async function handleAction(body: Record<string, unknown>) {
           : null;
       invoice.dueDates = dueDates;
       invoice.installmentAmountsCents = installmentAmountsCents;
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'delete_invoice': {
@@ -265,7 +278,7 @@ async function handleAction(body: Record<string, unknown>) {
         return error('Reabra o período antes de excluir esta nota.', 409);
       }
       data.invoices.splice(index, 1);
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'resend_invoice': {
@@ -286,7 +299,7 @@ async function handleAction(body: Record<string, unknown>) {
         resentFromId: source.id,
         createdAt: timestamp(),
       });
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'add_expense': {
@@ -316,7 +329,7 @@ async function handleAction(body: Record<string, unknown>) {
             : null,
         createdAt: timestamp(),
       });
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'update_expense': {
@@ -345,7 +358,7 @@ async function handleAction(body: Record<string, unknown>) {
         typeof body.settledDate === 'string' && body.settledDate
           ? body.settledDate
           : null;
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'delete_expense': {
@@ -360,7 +373,7 @@ async function handleAction(body: Record<string, unknown>) {
         return error('Reabra o período antes de excluir esta despesa.', 409);
       }
       data.expenses.splice(index, 1);
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'add_deposit': {
@@ -387,7 +400,7 @@ async function handleAction(body: Record<string, unknown>) {
             : null,
         createdAt: timestamp(),
       });
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'update_deposit': {
@@ -413,7 +426,7 @@ async function handleAction(body: Record<string, unknown>) {
         typeof body.depositor === 'string' && body.depositor.trim()
           ? body.depositor.trim()
           : null;
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     case 'delete_deposit': {
@@ -428,7 +441,7 @@ async function handleAction(body: Record<string, unknown>) {
         return error('Reabra o período antes de excluir este depósito.', 409);
       }
       data.deposits.splice(index, 1);
-      return NextResponse.json(await saveData(data));
+      return NextResponse.json(await saveData(shift, data));
     }
 
     default:
@@ -436,9 +449,9 @@ async function handleAction(body: Record<string, unknown>) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return NextResponse.json(await readData());
+    return NextResponse.json(await readData(shiftFrom(request)));
   } catch (cause) {
     console.error(cause);
     return error('Não foi possível carregar os dados.', 500);
@@ -448,6 +461,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     return await handleAction(
+      shiftFrom(request),
       (await request.json()) as Record<string, unknown>,
     );
   } catch (cause) {

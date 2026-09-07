@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   type ReactNode,
   type SyntheticEvent,
@@ -59,6 +60,7 @@ import type {
   ModuleName,
   Period,
   ViewName,
+  WorkShift,
 } from '@/lib/types';
 
 const emptyData: ControlData = {
@@ -67,6 +69,33 @@ const emptyData: ControlData = {
   expenses: [],
   deposits: [],
 };
+
+const shiftInfo: Record<
+  WorkShift,
+  { label: string; shortLabel: string; otherLabel: string; otherHref: string }
+> = {
+  day: {
+    label: 'Turno Dia',
+    shortLabel: 'Dia',
+    otherLabel: 'Acessar Turno Noite',
+    otherHref: '/noite',
+  },
+  night: {
+    label: 'Turno Noite',
+    shortLabel: 'Noite',
+    otherLabel: 'Acessar Turno Dia',
+    otherHref: '/',
+  },
+};
+
+function byDate<T extends { id: string; createdAt: string }>(
+  dateOf: (record: T) => string,
+) {
+  return (left: T, right: T) =>
+    dateOf(left).localeCompare(dateOf(right)) ||
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.id.localeCompare(right.id);
+}
 
 type RecordTarget =
   | { module: 'invoices'; record: Invoice }
@@ -225,7 +254,7 @@ function advanceOnEnter(event: KeyboardEvent, form: HTMLFormElement) {
   }
 }
 
-export function ControlApp() {
+export function ControlApp({ shift }: { shift: WorkShift }) {
   const [view, setView] = useState<ViewName>('overview');
   const [data, setData] = useState<ControlData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -243,7 +272,9 @@ export function ControlApp() {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch('/api/control', { cache: 'no-store' });
+      const response = await fetch(`/api/control?shift=${shift}`, {
+        cache: 'no-store',
+      });
       const result = (await response.json()) as ControlData & {
         error?: string;
       };
@@ -261,7 +292,7 @@ export function ControlApp() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shift]);
 
   useEffect(() => {
     queueMicrotask(() => void load());
@@ -271,7 +302,7 @@ export function ControlApp() {
     setWorking(true);
     setNotice(null);
     try {
-      const response = await fetch('/api/control', {
+      const response = await fetch(`/api/control?shift=${shift}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -370,8 +401,8 @@ export function ControlApp() {
         >
           Pular para o conteúdo
         </a>
-        <DesktopSidebar view={view} onNavigate={navigate} />
-        <MobileHeader />
+        <DesktopSidebar view={view} onNavigate={navigate} shift={shift} />
+        <MobileHeader shift={shift} />
 
         <main id="main-content" className="pb-28 lg:ml-[252px] lg:pb-10">
           <div className="mx-auto max-w-[1360px] px-4 py-5 sm:px-6 sm:py-8 lg:px-10 lg:py-10">
@@ -543,6 +574,7 @@ export function ControlApp() {
         <PrintCover
           data={data}
           periodId={coverPeriodId}
+          shift={shift}
           onClose={() => setCoverPeriodId(null)}
         />
       )}
@@ -553,9 +585,11 @@ export function ControlApp() {
 function DesktopSidebar({
   view,
   onNavigate,
+  shift,
 }: {
   view: ViewName;
   onNavigate: (view: ViewName) => void;
+  shift: WorkShift;
 }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-black text-white lg:flex">
@@ -570,6 +604,9 @@ function DesktopSidebar({
         />
         <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">
           Controle financeiro
+        </p>
+        <p className="mt-2 inline-flex rounded-full bg-white px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-black">
+          {shiftInfo[shift].label}
         </p>
       </div>
       <div className="mx-5 h-px bg-white/10" />
@@ -599,12 +636,18 @@ function DesktopSidebar({
         <p className="mt-2 text-[11px] leading-5 text-white/45">
           Cada relatório possui seu próprio período e histórico.
         </p>
+        <Link
+          href={shiftInfo[shift].otherHref}
+          className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-white/20 px-3 text-xs font-bold text-white transition hover:bg-white hover:text-black"
+        >
+          {shiftInfo[shift].otherLabel}
+        </Link>
       </div>
     </aside>
   );
 }
 
-function MobileHeader() {
+function MobileHeader({ shift }: { shift: WorkShift }) {
   return (
     <header className="sticky top-0 z-30 border-b border-black/8 bg-white/95 backdrop-blur lg:hidden">
       <div className="flex h-[68px] items-center justify-between px-4">
@@ -620,7 +663,9 @@ function MobileHeader() {
         </div>
         <div className="text-right">
           <p className="text-xs font-semibold">Controle financeiro</p>
-          <p className="mt-0.5 text-[10px] text-zinc-400">Uso interno</p>
+          <p className="mt-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#765541]">
+            {shiftInfo[shift].label}
+          </p>
         </div>
       </div>
     </header>
@@ -1006,7 +1051,9 @@ function InvoiceView({
   onDelete,
 }: ModuleProps & RecordActionsProps<Invoice>) {
   const records = period
-    ? data.invoices.filter((item) => item.periodId === period.id)
+    ? data.invoices
+        .filter((item) => item.periodId === period.id)
+        .sort(byDate((item) => item.issueDate))
     : [];
   const [dueDates, setDueDates] = useState([today()]);
   const [installmentAmounts, setInstallmentAmounts] = useState<
@@ -1269,7 +1316,9 @@ function ExpenseView({
   onDelete,
 }: ModuleProps & RecordActionsProps<Expense>) {
   const records = period
-    ? data.expenses.filter((item) => item.periodId === period.id)
+    ? data.expenses
+        .filter((item) => item.periodId === period.id)
+        .sort(byDate((item) => item.expenseDate))
     : [];
   const total = records.reduce((sum, item) => sum + item.amountCents, 0);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -1533,13 +1582,15 @@ function HistoryView({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ModuleName>('all');
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
-  const notes = data.invoices.filter(
-    (invoice) =>
-      !normalized ||
-      `${invoice.supplier} ${invoice.invoiceNumber} ${invoice.periodLabel} ${invoice.accessKey ?? ''}`
-        .toLocaleLowerCase('pt-BR')
-        .includes(normalized),
-  );
+  const notes = data.invoices
+    .filter(
+      (invoice) =>
+        !normalized ||
+        `${invoice.supplier} ${invoice.invoiceNumber} ${invoice.periodLabel} ${invoice.accessKey ?? ''}`
+          .toLocaleLowerCase('pt-BR')
+          .includes(normalized),
+    )
+    .sort(byDate((item) => item.issueDate));
   const periods = data.periods.filter(
     (period) =>
       period.status === 'closed' &&
@@ -1707,10 +1758,12 @@ function HistoryView({
 function PrintCover({
   data,
   periodId,
+  shift,
   onClose,
 }: {
   data: ControlData;
   periodId: string;
+  shift: WorkShift;
   onClose: () => void;
 }) {
   const period = data.periods.find((item) => item.id === periodId);
@@ -1727,8 +1780,12 @@ function PrintCover({
 
   if (!period) return null;
 
-  const invoices = data.invoices.filter((item) => item.periodId === period.id);
-  const expenses = data.expenses.filter((item) => item.periodId === period.id);
+  const invoices = data.invoices
+    .filter((item) => item.periodId === period.id)
+    .sort(byDate((item) => item.issueDate));
+  const expenses = data.expenses
+    .filter((item) => item.periodId === period.id)
+    .sort(byDate((item) => item.expenseDate));
   const deposits = data.deposits.filter((item) => item.periodId === period.id);
   const records =
     period.module === 'invoices'
@@ -1797,6 +1854,9 @@ function PrintCover({
             </h1>
             <p className="print-unit-label mt-1 text-xs font-extrabold uppercase tracking-[0.08em] text-white">
               Unidade Balneário Piçarras
+            </p>
+            <p className="print-shift-label mt-2 inline-flex rounded border border-white px-2 py-1 text-sm font-extrabold uppercase tracking-[0.14em] text-white">
+              {shiftInfo[shift].label}
             </p>
           </div>
         </header>

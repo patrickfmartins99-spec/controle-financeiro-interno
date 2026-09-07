@@ -152,6 +152,14 @@
     font-size: 10pt !important;
   }
 
+  .print-document-header .print-shift-label {
+    color: white !important;
+    border-color: white !important;
+    font-size: 10pt !important;
+    line-height: 1 !important;
+    padding: 1.2mm 2.2mm !important;
+  }
+
   .print-cover-logo {
     height: 12mm !important;
   }
