@@ -394,7 +394,7 @@ export function ControlApp({ shift }: { shift: WorkShift }) {
 
   return (
     <>
-      <div className="app-shell min-h-dvh bg-[#efede9] text-[#171717]">
+      <div className="app-shell min-h-dvh overflow-x-hidden bg-[#efede9] text-[#171717]">
         <a
           href="#main-content"
           className="fixed left-4 top-0 z-[90] -translate-y-full rounded-lg bg-black px-4 py-3 text-sm font-bold text-white shadow-xl transition-transform focus:translate-y-4"
