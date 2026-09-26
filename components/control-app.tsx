@@ -1110,10 +1110,10 @@ function InvoiceView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados da nota"
-          description="O valor da nota não é necessário neste controle."
+          description="Informe os dados da nota e o valor total ou de cada parcela."
         >
           <form
             ref={invoiceFormRef}
@@ -1131,7 +1131,7 @@ function InvoiceView({
                 disabled={!period || working}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
               <Field label="Data de emissão" hint="DD/MM/AAAA">
                 <Input
                   name="issueDate"
@@ -1366,7 +1366,7 @@ function ExpenseView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados da despesa"
           description="A data da baixa pode ser informada depois."
@@ -1387,7 +1387,7 @@ function ExpenseView({
                 disabled={!period || working}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
               <Field label="Data da despesa" hint="DD/MM/AAAA">
                 <Input
                   name="expenseDate"
@@ -1499,7 +1499,7 @@ function DepositView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados do depósito"
           description="O nome do depositante é opcional."
@@ -1510,7 +1510,7 @@ function DepositView({
             aria-label="Cadastro de depósito"
             className="space-y-4"
           >
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
               <Field label="Data do depósito" hint="DD/MM/AAAA">
                 <Input
                   ref={depositDateRef}
@@ -3157,3 +3157,4 @@ function BarcodeScanner({
     </dialog>
   );
 }
+
