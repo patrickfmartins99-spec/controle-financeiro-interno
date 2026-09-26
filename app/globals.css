@@ -60,11 +60,13 @@
   }
   html {
     font-family: ui-rounded, sans-serif;
+    overflow-x: hidden;
   }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-nunito-sans), ui-rounded, sans-serif;
     min-width: 320px;
+    overflow-x: hidden;
   }
   button,
   a,
@@ -277,3 +279,4 @@
     overflow: visible !important;
   }
 }
+
