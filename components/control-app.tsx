@@ -1110,7 +1110,7 @@ function InvoiceView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados da nota"
           description="Informe os dados da nota e o valor total ou de cada parcela."
@@ -1131,7 +1131,7 @@ function InvoiceView({
                 disabled={!period || working}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data de emissão" hint="DD/MM/AAAA">
                 <Input
                   name="issueDate"
@@ -1366,7 +1366,7 @@ function ExpenseView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados da despesa"
           description="A data da baixa pode ser informada depois."
@@ -1387,7 +1387,7 @@ function ExpenseView({
                 disabled={!period || working}
               />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data da despesa" hint="DD/MM/AAAA">
                 <Input
                   name="expenseDate"
@@ -1499,7 +1499,7 @@ function DepositView({
         onClosePeriod={onClosePeriod}
         onOpen={onOpen}
       />
-      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
         <FormSection
           title="Preencha os dados do depósito"
           description="O nome do depositante é opcional."
@@ -1510,7 +1510,7 @@ function DepositView({
             aria-label="Cadastro de depósito"
             className="space-y-4"
           >
-            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
               <Field label="Data do depósito" hint="DD/MM/AAAA">
                 <Input
                   ref={depositDateRef}
@@ -2268,7 +2268,7 @@ function InvoiceRecords({
 }: { records: Invoice[] } & RecordActionsProps<Invoice>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2302,7 +2302,7 @@ function InvoiceRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -2353,7 +2353,7 @@ function ExpenseRecords({
 }: { records: Expense[] } & RecordActionsProps<Expense>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2375,7 +2375,7 @@ function ExpenseRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -2417,7 +2417,7 @@ function DepositRecords({
 }: { records: Deposit[] } & RecordActionsProps<Deposit>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2435,7 +2435,7 @@ function DepositRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block">
+      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
