@@ -2268,7 +2268,7 @@ function InvoiceRecords({
 }: { records: Invoice[] } & RecordActionsProps<Invoice>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2302,7 +2302,7 @@ function InvoiceRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -2353,7 +2353,7 @@ function ExpenseRecords({
 }: { records: Expense[] } & RecordActionsProps<Expense>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2375,7 +2375,7 @@ function ExpenseRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
@@ -2417,7 +2417,7 @@ function DepositRecords({
 }: { records: Deposit[] } & RecordActionsProps<Deposit>) {
   return (
     <>
-      <div className="divide-y divide-zinc-100 md:hidden xl:block 2xl:hidden">
+      <div className="divide-y divide-zinc-100 md:hidden">
         {records.map((item) => (
           <article key={item.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
@@ -2435,7 +2435,7 @@ function DepositRecords({
           </article>
         ))}
       </div>
-      <div className="hidden overflow-x-auto md:block xl:hidden 2xl:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-sm">
           <thead>
             <tr>
