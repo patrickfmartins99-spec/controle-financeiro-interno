@@ -2031,8 +2031,8 @@ function PrintCover({
                     Comprovante de entrega
                   </h3>
                   <p className="mt-1 text-[11px] leading-5 text-zinc-600">
-                    Declaro o recebimento de {receiptDescription} relacionados
-                    neste relatório, referente ao protocolo {protocol}.
+                    Declaro o recebimento de {receiptDescription}, conforme a
+                    relação deste relatório, referente ao protocolo {protocol}.
                   </p>
                 </div>
                 <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.08em]">
