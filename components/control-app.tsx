@@ -200,6 +200,73 @@ const dateLabel = (value?: string | null) =>
       )
     : 'Não informada';
 
+const monthNames = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
+
+function longDateLabel(value: string) {
+  const [year, month, day] = value.slice(0, 10).split('-');
+  const monthName = monthNames[Number(month) - 1];
+  return year && monthName && day
+    ? `${day}/${monthName}/${year}`
+    : dateLabel(value);
+}
+
+function periodDates(data: ControlData, period: Period) {
+  const dates =
+    period.module === 'invoices'
+      ? data.invoices
+          .filter((item) => item.periodId === period.id)
+          .map((item) => item.issueDate)
+      : period.module === 'expenses'
+        ? data.expenses
+            .filter((item) => item.periodId === period.id)
+            .map((item) => item.expenseDate)
+        : data.deposits
+            .filter((item) => item.periodId === period.id)
+            .map((item) => item.depositDate);
+
+  return dates.filter(Boolean).sort((left, right) => left.localeCompare(right));
+}
+
+function periodBounds(data: ControlData, period: Period) {
+  const dates = periodDates(data, period);
+  return dates.length
+    ? { start: dates[0], end: dates[dates.length - 1] }
+    : null;
+}
+
+function periodRangeLabel(data: ControlData, period: Period) {
+  const bounds = periodBounds(data, period);
+  if (!bounds) return 'Aguardando o primeiro lançamento';
+  if (bounds.start === bounds.end) return longDateLabel(bounds.start);
+  return `${longDateLabel(bounds.start)} a ${longDateLabel(bounds.end)}`;
+}
+
+function periodProtocol(period: Period, shift: WorkShift) {
+  const moduleCode = {
+    invoices: 'NF',
+    expenses: 'DESP',
+    deposits: 'DEP',
+  }[period.module];
+  const referenceDate = (period.closedAt ?? period.openedAt)
+    .slice(0, 10)
+    .replaceAll('-', '');
+  const shortId = period.id.replaceAll('-', '').slice(0, 6).toUpperCase();
+  return `TH-BP-${shift === 'day' ? 'D' : 'N'}-${moduleCode}-${referenceDate}-${shortId}`;
+}
+
 function today() {
   const date = new Date();
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
@@ -508,7 +575,7 @@ export function ControlApp({ shift }: { shift: WorkShift }) {
               </AlertDialogTitle>
               <AlertDialogDescription className="leading-6">
                 {periodToClose
-                  ? `O período “${periodToClose.label}” será fechado e enviado ao histórico. Você poderá reabri-lo depois, se precisar corrigir algum lançamento.`
+                  ? `O período “${periodRangeLabel(data, periodToClose)}” será fechado e enviado ao histórico. Você poderá reabri-lo depois, se precisar corrigir algum lançamento.`
                   : ''}
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -804,6 +871,7 @@ function Overview({
           <OverviewCard
             key={module}
             module={module}
+            data={data}
             period={periods[module]}
             count={entries[module].length}
             total={
@@ -882,12 +950,14 @@ function Overview({
 
 function OverviewCard({
   module,
+  data,
   period,
   count,
   total,
   onClick,
 }: {
   module: ModuleName;
+  data: ControlData;
   period: Period | null;
   count: number;
   total?: number;
@@ -919,7 +989,9 @@ function OverviewCard({
         <div>
           <h2 className="font-heading text-lg font-bold">{info.title}</h2>
           <p className="mt-1 line-clamp-1 text-xs text-zinc-500">
-            {period?.label ?? 'Toque para abrir um período'}
+            {period
+              ? periodRangeLabel(data, period)
+              : 'Toque para abrir um período'}
           </p>
           <p className="mt-3 text-base font-extrabold">
             {total === undefined
@@ -972,6 +1044,7 @@ type RecordActionsProps<T> = {
 };
 
 function PeriodStep({
+  data,
   module,
   period,
   count,
@@ -980,6 +1053,7 @@ function PeriodStep({
   onClosePeriod,
   onOpen,
 }: {
+  data: ControlData;
   module: ModuleName;
   period: Period | null;
   count: number;
@@ -998,7 +1072,9 @@ function PeriodStep({
               Confirme o período
             </p>
             <h2 className="font-heading mt-1 text-lg font-bold">
-              {period?.label ?? 'Nenhum período aberto'}
+              {period
+                ? periodRangeLabel(data, period)
+                : 'Nenhum período aberto'}
             </h2>
             <p className="mt-1 text-xs text-white/60">
               {period
@@ -1103,6 +1179,7 @@ function InvoiceView({
         description="Registre a confirmação de recebimento e informe todos os vencimentos da nota."
       />
       <PeriodStep
+        data={data}
         module="invoices"
         period={period}
         count={records.length}
@@ -1358,6 +1435,7 @@ function ExpenseView({
         description="O total abaixo considera exclusivamente o período que está aberto."
       />
       <PeriodStep
+        data={data}
         module="expenses"
         period={period}
         count={records.length}
@@ -1491,6 +1569,7 @@ function DepositView({
         description="Registre o valor, a data e o depositante somente quando for necessário."
       />
       <PeriodStep
+        data={data}
         module="deposits"
         period={period}
         count={records.length}
@@ -1582,11 +1661,14 @@ function HistoryView({
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | ModuleName>('all');
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
+  const periodLabels = new Map(
+    data.periods.map((period) => [period.id, periodRangeLabel(data, period)]),
+  );
   const notes = data.invoices
     .filter(
       (invoice) =>
         !normalized ||
-        `${invoice.supplier} ${invoice.invoiceNumber} ${invoice.periodLabel} ${invoice.accessKey ?? ''}`
+        `${invoice.supplier} ${invoice.invoiceNumber} ${invoice.periodLabel} ${periodLabels.get(invoice.periodId) ?? ''} ${invoice.accessKey ?? ''}`
           .toLocaleLowerCase('pt-BR')
           .includes(normalized),
     )
@@ -1625,9 +1707,14 @@ function HistoryView({
             className="pl-10"
           />
         </div>
+        <p className="mt-2 text-xs font-semibold text-zinc-500">
+          {normalized
+            ? `${notes.length} ${notes.length === 1 ? 'nota encontrada' : 'notas encontradas'}`
+            : `${notes.length} ${notes.length === 1 ? 'nota armazenada' : 'notas armazenadas'} neste turno · todas disponíveis para consulta`}
+        </p>
         <div className="mt-4 space-y-2">
           {notes.length ? (
-            notes.slice(0, 30).map((invoice) => (
+            notes.map((invoice) => (
               <article
                 key={invoice.id}
                 className="rounded-xl border border-zinc-200 p-4"
@@ -1646,8 +1733,9 @@ function HistoryView({
                       )}
                     </div>
                     <p className="mt-2 text-xs leading-5 text-zinc-500">
-                      {invoice.periodLabel} · Emissão{' '}
-                      {dateLabel(invoice.issueDate)}
+                      {periodLabels.get(invoice.periodId) ??
+                        invoice.periodLabel}{' '}
+                      · Emissão {dateLabel(invoice.issueDate)}
                     </p>
                     <InvoiceDueValues invoice={invoice} className="mt-1" />
                   </div>
@@ -1715,7 +1803,9 @@ function HistoryView({
                       <Icon className="size-4" />
                     </span>
                     <div>
-                      <h3 className="text-sm font-semibold">{period.label}</h3>
+                      <h3 className="text-sm font-semibold">
+                        {periodRangeLabel(data, period)}
+                      </h3>
                       <p className="mt-1 text-xs text-zinc-500">
                         {moduleInfo[period.module].title} · encerrado em{' '}
                         {dateLabel(period.closedAt)}
@@ -1799,6 +1889,14 @@ function PrintCover({
       : period.module === 'deposits'
         ? deposits.reduce((sum, item) => sum + item.amountCents, 0)
         : null;
+  const bounds = periodBounds(data, period);
+  const rangeLabel = periodRangeLabel(data, period);
+  const protocol = periodProtocol(period, shift);
+  const copyLabels = ['Via do Financeiro', 'Via da Unidade'] as const;
+  const receiptDescription =
+    period.module === 'invoices'
+      ? `${records.length} ${records.length === 1 ? 'nota fiscal física' : 'notas fiscais físicas'}`
+      : `${records.length} ${records.length === 1 ? 'documento relacionado' : 'documentos relacionados'}`;
 
   return (
     <dialog
@@ -1807,13 +1905,11 @@ function PrintCover({
       aria-modal="true"
       aria-label="Capa do período encerrado"
     >
-      <div
-        className="print-actions sticky top-0 z-10 mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-lg sm:p-4"
-      >
+      <div className="print-actions sticky top-0 z-10 mx-auto mb-4 flex max-w-[210mm] items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-lg sm:p-4">
         <div>
-          <p className="text-sm font-bold">Capa pronta</p>
+          <p className="text-sm font-bold">Protocolo de entrega pronto</p>
           <p className="text-xs text-zinc-500">
-            A4 vertical · Confira as informações antes de imprimir.
+            A impressão gera duas vias: Financeiro e Unidade.
           </p>
         </div>
         <div className="flex gap-2">
@@ -1829,87 +1925,134 @@ function PrintCover({
             onClick={() => window.print()}
             className="h-11 bg-black hover:bg-zinc-800"
           >
-            <Printer /> Imprimir
+            <Printer /> Imprimir 2 vias
           </Button>
         </div>
       </div>
 
-      <article
-        className="print-document mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10"
-      >
-        <header className="print-document-header flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-4 text-white">
-          <Image
-            src="/logo-top-haus.jpg"
-            alt="Top Haus"
-            width={142}
-            height={88}
-            className="print-cover-logo h-12 w-auto"
-          />
-          <div className="text-right">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/60">
-              Controle interno
-            </p>
-            <h1 className="mt-1 text-lg font-extrabold">
-              Relatório de {moduleInfo[period.module].title.toLowerCase()}
-            </h1>
-            <p className="print-unit-label mt-1 text-xs font-extrabold uppercase tracking-[0.08em] text-white">
-              Unidade Balneário Piçarras
-            </p>
-            <p className="print-shift-label mt-2 inline-flex rounded border border-white px-2 py-1 text-sm font-extrabold uppercase tracking-[0.14em] text-white">
-              {shiftInfo[shift].label}
-            </p>
-          </div>
-        </header>
-
-        <section className="print-summary border-x border-b border-black/15 px-6 py-5">
-          <h2 className="print-summary-title text-xl font-extrabold">
-            {period.label}
-          </h2>
-
-          <div className="print-meta-grid mt-4 grid grid-cols-3 gap-3">
-            <PrintMeta label="Abertura" value={dateLabel(period.openedAt)} />
-            <PrintMeta label="Fechamento" value={dateLabel(period.closedAt)} />
-            <PrintMeta
-              label="Lançamentos"
-              value={`${records.length} ${records.length === 1 ? 'item' : 'itens'}`}
-            />
-          </div>
-
-          {total !== null && (
-            <div className="print-total mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border-2 border-black bg-white px-4 py-3 sm:flex-row sm:items-center sm:gap-6">
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-black">
-                  {period.module === 'expenses'
-                    ? 'Total de despesas'
-                    : 'Total depositado'}
+      <div className="print-documents space-y-6">
+        {copyLabels.map((copyLabel) => (
+          <article
+            key={copyLabel}
+            className="print-document mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-6 text-black shadow-2xl sm:p-10"
+          >
+            <header className="print-document-header flex items-center justify-between gap-6 border-b-2 border-black bg-black px-6 py-4 text-white">
+              <Image
+                src="/logo-top-haus.jpg"
+                alt="Top Haus"
+                width={142}
+                height={88}
+                className="print-cover-logo h-12 w-auto"
+              />
+              <div className="text-right">
+                <p className="print-copy-label inline-flex rounded bg-white px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-black">
+                  {copyLabel}
+                </p>
+                <p className="mt-2 text-[10px] font-extrabold uppercase tracking-[0.2em] text-white/60">
+                  Controle interno
+                </p>
+                <h1 className="mt-1 text-lg font-extrabold">
+                  Relatório de {moduleInfo[period.module].title.toLowerCase()}
+                </h1>
+                <p className="print-unit-label mt-1 text-xs font-extrabold uppercase tracking-[0.08em] text-white">
+                  Unidade Balneário Piçarras
+                </p>
+                <p className="print-shift-label mt-2 inline-flex rounded border border-white px-2 py-1 text-sm font-extrabold uppercase tracking-[0.14em] text-white">
+                  {shiftInfo[shift].label}
                 </p>
               </div>
-              <p className="text-2xl font-extrabold">{currency(total)}</p>
-            </div>
-          )}
-        </section>
+            </header>
 
-        <section className="print-records-section mt-5">
-          <div className="print-records-heading mb-2 flex items-end justify-between gap-4">
-            <h3 className="text-base font-extrabold">Lançamentos do período</h3>
-            <p className="text-xs font-bold text-zinc-500">
-              {records.length} {records.length === 1 ? 'registro' : 'registros'}
-            </p>
-          </div>
+            <section className="print-summary border-x border-b border-black/15 px-6 py-5">
+              <h2 className="print-summary-title text-xl font-extrabold">
+                {rangeLabel}
+              </h2>
+              <p className="print-protocol mt-1 text-xs font-bold uppercase tracking-[0.08em] text-zinc-500">
+                Protocolo {protocol}
+              </p>
 
-          {records.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-10 text-center text-sm text-zinc-500">
-              Este período foi encerrado sem lançamentos.
-            </div>
-          ) : period.module === 'invoices' ? (
-            <PrintInvoiceTable records={invoices} />
-          ) : period.module === 'expenses' ? (
-            <PrintExpenseTable records={expenses} />
-          ) : (
-            <PrintDepositTable records={deposits} />
-          )}
-        </section>
-      </article>
+              <div className="print-meta-grid mt-4 grid grid-cols-3 gap-3">
+                <PrintMeta
+                  label="Início do período"
+                  value={bounds ? dateLabel(bounds.start) : 'Sem lançamento'}
+                />
+                <PrintMeta
+                  label="Fim do período"
+                  value={bounds ? dateLabel(bounds.end) : 'Sem lançamento'}
+                />
+                <PrintMeta
+                  label="Lançamentos"
+                  value={`${records.length} ${records.length === 1 ? 'item' : 'itens'}`}
+                />
+              </div>
+
+              {total !== null && (
+                <div className="print-total mt-4 flex flex-col items-start justify-between gap-2 rounded-xl border-2 border-black bg-white px-4 py-3 sm:flex-row sm:items-center sm:gap-6">
+                  <div>
+                    <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-black">
+                      {period.module === 'expenses'
+                        ? 'Total de despesas'
+                        : 'Total depositado'}
+                    </p>
+                  </div>
+                  <p className="text-2xl font-extrabold">{currency(total)}</p>
+                </div>
+              )}
+            </section>
+
+            <section className="print-records-section mt-5">
+              <div className="print-records-heading mb-2 flex items-end justify-between gap-4">
+                <h3 className="text-base font-extrabold">
+                  Lançamentos do período
+                </h3>
+                <p className="text-xs font-bold text-zinc-500">
+                  {records.length}{' '}
+                  {records.length === 1 ? 'registro' : 'registros'}
+                </p>
+              </div>
+
+              {records.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-zinc-300 px-6 py-10 text-center text-sm text-zinc-500">
+                  Este período foi encerrado sem lançamentos.
+                </div>
+              ) : period.module === 'invoices' ? (
+                <PrintInvoiceTable records={invoices} />
+              ) : period.module === 'expenses' ? (
+                <PrintExpenseTable records={expenses} />
+              ) : (
+                <PrintDepositTable records={deposits} />
+              )}
+            </section>
+
+            <section className="print-receipt mt-5 rounded-xl border-2 border-black px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-extrabold uppercase tracking-[0.08em]">
+                    Comprovante de entrega
+                  </h3>
+                  <p className="mt-1 text-[11px] leading-5 text-zinc-600">
+                    Declaro o recebimento de {receiptDescription} relacionados
+                    neste relatório, referente ao protocolo {protocol}.
+                  </p>
+                </div>
+                <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.08em]">
+                  {copyLabel}
+                </span>
+              </div>
+              <div className="print-receipt-fields mt-7 grid grid-cols-3 gap-5 text-[10px] font-bold uppercase tracking-[0.06em]">
+                <div className="border-t border-black pt-2">
+                  Nome legível do recebedor
+                </div>
+                <div className="border-t border-black pt-2">Assinatura</div>
+                <div className="border-t border-black pt-2">Data e horário</div>
+              </div>
+              <div className="mt-7 border-t border-black pt-2 text-[10px] font-bold uppercase tracking-[0.06em]">
+                Ressalvas ou divergências no recebimento
+              </div>
+            </section>
+          </article>
+        ))}
+      </div>
     </dialog>
   );
 }
@@ -1944,7 +2087,10 @@ function PrintInvoiceTable({ records }: { records: Invoice[] }) {
               <PrintTd>{dateLabel(item.issueDate)}</PrintTd>
               <PrintTd>{item.invoiceNumber}</PrintTd>
               <PrintTd>
-                <InvoiceDueValues invoice={item} className="print-invoice-dues" />
+                <InvoiceDueValues
+                  invoice={item}
+                  className="print-invoice-dues"
+                />
               </PrintTd>
             </tr>
           ))}
@@ -1971,7 +2117,9 @@ function PrintExpenseTable({ records }: { records: Expense[] }) {
             <tr key={item.id} className="border-t border-zinc-200 align-top">
               <PrintTd strong>{item.name}</PrintTd>
               <PrintTd>{dateLabel(item.expenseDate)}</PrintTd>
-              <PrintTd strong className="text-right tabular-nums">{currency(item.amountCents)}</PrintTd>
+              <PrintTd strong className="text-right tabular-nums">
+                {currency(item.amountCents)}
+              </PrintTd>
               <PrintTd>{dateLabel(item.settledDate)}</PrintTd>
             </tr>
           ))}
@@ -2992,13 +3140,11 @@ function OpenPeriodModal({
 }) {
   async function submit(event: SyntheticEvent<HTMLFormElement, SubmitEvent>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
     await act(
-      { action: 'open_period', module, label: form.get('label') },
+      { action: 'open_period', module },
       `Período de ${moduleInfo[module].title.toLocaleLowerCase('pt-BR')} aberto.`,
     );
   }
-  const suggestion = `${moduleInfo[module].shortTitle} · ${new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date())}`;
   return (
     <dialog
       open
@@ -3019,13 +3165,15 @@ function OpenPeriodModal({
           Abrir período de {moduleInfo[module].title.toLocaleLowerCase('pt-BR')}
         </h2>
         <p className="mt-2 text-sm leading-6 text-zinc-500">
-          Ele será independente dos outros relatórios e permanecerá aberto até
-          você encerrá-lo.
+          Ele será independente dos outros relatórios. O nome do período será
+          calculado automaticamente entre a data do primeiro e do último
+          lançamento.
         </p>
-        <form onSubmit={submit} className="mt-5 space-y-5">
-          <Field label="Como deseja identificar este período?">
-            <Input name="label" defaultValue={suggestion} required autoFocus />
-          </Field>
+        <form onSubmit={submit} className="mt-5">
+          <div className="mb-5 rounded-xl border border-[#d8c9bf] bg-[#f8f4f1] px-4 py-3 text-sm leading-6 text-[#5f4333]">
+            Até o primeiro lançamento, ele aparecerá como “Aguardando o primeiro
+            lançamento”.
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <Button
               type="button"

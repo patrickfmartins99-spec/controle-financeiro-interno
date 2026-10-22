@@ -118,6 +118,13 @@
     padding: 0 !important;
     box-shadow: none !important;
     font-size: 10pt;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-document:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .print-document,
@@ -160,6 +167,13 @@
     font-size: 10pt !important;
     line-height: 1 !important;
     padding: 1.2mm 2.2mm !important;
+  }
+
+  .print-document-header .print-copy-label {
+    color: black !important;
+    background: white !important;
+    font-size: 8pt !important;
+    line-height: 1 !important;
   }
 
   .print-cover-logo {
@@ -268,6 +282,24 @@
 
   .print-invoice-dues > div {
     margin: 0 !important;
+  }
+
+  .print-receipt {
+    margin-top: 3mm !important;
+    padding: 3mm 4mm !important;
+    border-radius: 1mm !important;
+    break-inside: avoid;
+  }
+
+  .print-receipt p {
+    color: black !important;
+    font-size: 8.5pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .print-receipt-fields {
+    margin-top: 8mm !important;
+    gap: 4mm !important;
   }
 
   html,

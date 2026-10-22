@@ -104,20 +104,13 @@ function updateRecordStatus(
   }
 }
 
-async function handleAction(
-  shift: WorkShift,
-  body: Record<string, unknown>,
-) {
+async function handleAction(shift: WorkShift, body: Record<string, unknown>) {
   const data = await readData(shift);
 
   switch (body.action) {
     case 'open_period': {
-      if (
-        !validModule(body.module) ||
-        typeof body.label !== 'string' ||
-        !body.label.trim()
-      ) {
-        return error('Informe o tipo e o nome do período.');
+      if (!validModule(body.module)) {
+        return error('Informe o tipo do período.');
       }
       if (openPeriodFor(data, body.module)) {
         return error('Este relatório já possui um período aberto.', 409);
@@ -126,7 +119,7 @@ async function handleAction(
       data.periods.unshift({
         id: crypto.randomUUID(),
         module: body.module,
-        label: body.label.trim(),
+        label: 'Aguardando o primeiro lançamento',
         status: 'open',
         openedAt: now,
         closedAt: null,
@@ -472,3 +465,4 @@ export async function POST(request: Request) {
     );
   }
 }
+
